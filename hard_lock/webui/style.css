@@ -1,0 +1,253 @@
+/* Hard Lock — shared Fluent-inspired tokens + primitives. */
+
+:root {
+  --font: "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: "Cascadia Code", "JetBrains Mono", "Segoe UI Mono", Consolas, monospace;
+
+  --bg: #f3f3f3;
+  --mica: linear-gradient(180deg, #f6f4f1 0%, #efedea 100%);
+  --surface: #ffffff;
+  --surface-alt: #fafaf9;
+  --surface-sunken: #eeecea;
+  --border: rgba(0, 0, 0, 0.06);
+  --border-strong: rgba(0, 0, 0, 0.12);
+  --divider: rgba(0, 0, 0, 0.055);
+  --text: #1a1a1a;
+  --text-secondary: rgba(0, 0, 0, 0.6);
+  --text-tertiary: rgba(0, 0, 0, 0.45);
+  --text-disabled: rgba(0, 0, 0, 0.3);
+
+  --accent: #0067c0;
+  --accent-hover: #005ba1;
+  --accent-subtle: rgba(0, 103, 192, 0.08);
+
+  --green: #107c41;
+  --green-bg: rgba(16, 124, 65, 0.10);
+  --amber: #b8860b;
+  --amber-bg: rgba(184, 134, 11, 0.12);
+  --red: #c42b1c;
+  --red-bg: rgba(196, 43, 28, 0.10);
+
+  --shadow: 0 2px 6px rgba(0, 0, 0, 0.06), 0 0 1px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12), 0 0 1px rgba(0, 0, 0, 0.14);
+  --titlebar: #f9f7f5;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #202020;
+    --mica: linear-gradient(180deg, #2a2826 0%, #1f1d1b 100%);
+    --surface: #2b2b2b;
+    --surface-alt: #323232;
+    --surface-sunken: #1d1d1d;
+    --border: rgba(255, 255, 255, 0.07);
+    --border-strong: rgba(255, 255, 255, 0.14);
+    --divider: rgba(255, 255, 255, 0.06);
+    --text: #ffffff;
+    --text-secondary: rgba(255, 255, 255, 0.72);
+    --text-tertiary: rgba(255, 255, 255, 0.5);
+    --text-disabled: rgba(255, 255, 255, 0.36);
+
+    --accent: #4cc2ff;
+    --accent-hover: #47b1e8;
+    --accent-subtle: rgba(76, 194, 255, 0.12);
+
+    --green: #6ccb5f;
+    --green-bg: rgba(108, 203, 95, 0.14);
+    --amber: #fce100;
+    --amber-bg: rgba(252, 225, 0, 0.12);
+    --red: #ff99a4;
+    --red-bg: rgba(255, 153, 164, 0.14);
+
+    --shadow: 0 2px 6px rgba(0, 0, 0, 0.3), 0 0 1px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 1px rgba(0, 0, 0, 0.6);
+    --titlebar: #1f1f1f;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font);
+  color: var(--text);
+  background: var(--bg);
+  font-size: 13px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+.muted { color: var(--text-secondary); }
+.dim { color: var(--text-tertiary); }
+
+.mono { font-family: var(--font-mono); }
+
+.hidden { display: none !important; }
+
+/* ───────── Tone tokens ───────── */
+.tone-green   { color: var(--green); }
+.tone-amber   { color: var(--amber); }
+.tone-red     { color: var(--red); }
+.tone-bg-green { background: var(--green-bg); }
+.tone-bg-amber { background: var(--amber-bg); }
+.tone-bg-red   { background: var(--red-bg); }
+
+/* ───────── Buttons ───────── */
+.btn {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  padding: 6px 12px;
+  cursor: pointer;
+  box-shadow: inset 0 -1px 0 var(--border);
+  transition: background 0.08s ease;
+}
+.btn:hover { background: var(--surface-alt); }
+.btn:active { background: var(--surface-sunken); }
+.btn.primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.15);
+}
+.btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn.danger {
+  color: var(--red);
+  border-color: var(--red);
+}
+.btn.danger:hover { background: var(--red-bg); }
+.btn.sm { font-size: 11px; padding: 4px 10px; }
+.btn.lg { font-size: 13px; padding: 8px 18px; }
+
+/* ───────── Chips ───────── */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-sunken);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+.chip.green { background: var(--green-bg); color: var(--green); border-color: transparent; }
+.chip.amber { background: var(--amber-bg); color: var(--amber); border-color: transparent; }
+.chip.red   { background: var(--red-bg); color: var(--red); border-color: transparent; }
+
+/* ───────── Dots ───────── */
+.dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.dot.sm { width: 6px; height: 6px; }
+
+/* ───────── Progress bar ───────── */
+.progress {
+  position: relative;
+  width: 100%;
+  height: 6px;
+  background: var(--surface-sunken);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.progress > .fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+.progress.green > .fill { background: var(--green); }
+.progress.amber > .fill { background: var(--amber); }
+.progress.red > .fill { background: var(--red); }
+.progress.thin { height: 3px; }
+
+/* ───────── Stepper / text input ───────── */
+.field {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 10px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  box-shadow: inset 0 -1px 0 var(--border);
+  outline: none;
+}
+.field:focus { border-color: var(--accent); }
+
+/* ───────── Toggle ───────── */
+.toggle {
+  position: relative;
+  width: 40px;
+  height: 20px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  flex-shrink: 0;
+}
+.toggle.on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.toggle > .knob {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  background: #fff;
+  transition: transform 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+.toggle.on > .knob { transform: translateX(20px); }
+
+/* ───────── Window chrome ───────── */
+.win {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--mica);
+}
+.win-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--titlebar);
+  border-bottom: 1px solid var(--divider);
+  font-size: 12px;
+  -webkit-app-region: drag;
+}
+.win-title {
+  font-weight: 600;
+}
+.win-subtitle {
+  color: var(--text-secondary);
+}

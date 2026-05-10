@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hard Lock — Settings</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="settings.css" />
+</head>
+<body>
+  <div class="win">
+    <div class="win-titlebar">
+      <span class="win-title">Hard Lock</span>
+      <span class="win-subtitle">Settings</span>
+      <div style="flex: 1"></div>
+      <span id="status-chip" class="chip">
+        <span class="dot"></span>
+        <span id="status-chip-label">running</span>
+      </span>
+    </div>
+
+    <div class="layout">
+      <nav class="sidebar">
+        <div class="sidebar-heading">Configure</div>
+        <div class="nav-item active">
+          <span class="nav-icon">⏱</span>
+          <span>Limits</span>
+        </div>
+        <div class="nav-item disabled" title="Phase 4">
+          <span class="nav-icon">⚠</span>
+          <span>Warnings</span>
+        </div>
+        <div class="nav-item disabled" title="Phase 4">
+          <span class="nav-icon">🛡</span>
+          <span>Cooldown</span>
+        </div>
+        <div class="sidebar-divider"></div>
+        <div class="sidebar-status">
+          <span id="armed-dot" class="dot" style="color: var(--green)"></span>
+          <div>
+            <div id="armed-label" class="armed-title">Lock armed</div>
+            <div class="armed-sub">running in user session</div>
+          </div>
+        </div>
+      </nav>
+
+      <main class="content">
+        <div class="content-inner">
+        <div class="crumb">Configure · Limits</div>
+        <h1>Limits</h1>
+        <p class="intro">
+          Whichever comes first shuts down your computer. Tightening applies immediately.
+          Loosening waits out your cooldown.
+        </p>
+
+        <section class="section">
+          <div class="section-head">
+            <div class="section-title">Daily cap</div>
+            <div class="section-sub">Total active computer time allowed per day. Idle time doesn't count.</div>
+          </div>
+
+          <div class="row">
+            <div class="row-label">Cap (minutes)</div>
+            <div class="row-value">
+              <input id="daily_cap_minutes" class="field" type="number" min="0" step="5" />
+              <span class="muted xs" style="margin-left: 10px;">lower = tightening (instant)</span>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="row-label">Today</div>
+            <div class="row-value">
+              <div class="progress" style="max-width: 240px;">
+                <div id="today-fill" class="fill" style="width: 0%"></div>
+              </div>
+              <span id="today-usage" class="tnum muted" style="margin-left: 10px; font-size: 12px;">—</span>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="row-label">
+              Idle threshold (sec)
+              <div class="row-note">no input for this long pauses the timer</div>
+            </div>
+            <div class="row-value">
+              <input id="idle_threshold_seconds" class="field" type="number" min="10" step="10" style="width: 100px;" />
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-head">
+            <div class="section-title">Hard cutoff</div>
+            <div class="section-sub">Wall-clock time after which the computer shuts down regardless of usage.</div>
+          </div>
+
+          <div class="row">
+            <div class="row-label">Cutoff time</div>
+            <div class="row-value">
+              <input id="hard_cutoff_time" class="field" type="time" style="width: 130px;" />
+              <span class="muted xs" style="margin-left: 10px;">blank = disabled</span>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="row-label">
+              Grace seconds
+              <div class="row-note">topmost countdown bar before shutdown</div>
+            </div>
+            <div class="row-value">
+              <input id="grace_seconds" class="field" type="number" min="10" step="5" style="width: 100px;" />
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-head">
+            <div class="section-title">Warnings</div>
+            <div class="section-sub">Minutes-before-shutdown at which a warning fires. Comma-separated.</div>
+          </div>
+
+          <div class="row">
+            <div class="row-label">Warning minutes</div>
+            <div class="row-value">
+              <input id="warning_minutes_before" class="field" type="text" style="width: 180px;" />
+              <span class="muted xs" style="margin-left: 10px;">e.g. 30,10,5,1</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-head">
+            <div class="section-title">Cooldown</div>
+            <div class="section-sub">
+              Weakening changes (raise cap, push cutoff later, relax grace/idle, enable dry-run)
+              are queued for this long before taking effect.
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="row-label">Edit cooldown (hours)</div>
+            <div class="row-value">
+              <input id="edit_cooldown_hours" class="field" type="number" min="0" step="1" style="width: 100px;" />
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-head">
+            <div class="section-title">Dry-run mode</div>
+            <div class="section-sub">
+              Everything works the same, except the final shutdown is skipped. For testing.
+              Enabling is <em>weakening</em> (queued); disabling is <em>tightening</em> (instant).
+            </div>
+          </div>
+
+          <div class="row row-toggle">
+            <div class="row-label" style="flex: 1;">
+              <div>Dry-run is <span id="dry-state" class="tone-amber" style="font-weight: 600;">ON</span></div>
+            </div>
+            <div class="toggle" id="dry_run">
+              <div class="knob"></div>
+            </div>
+          </div>
+        </section>
+
+        <div class="anti-cheat-note">
+          <strong>Anti-cheat:</strong> weakening changes are deferred by your
+          edit cooldown. Tired-you-at-11pm can't relax the lock to get more
+          screen time; only rested-you-tomorrow can.
+        </div>
+
+        <div class="footer-actions">
+          <button id="reload" class="btn">Reload</button>
+          <div class="status-msg" id="apply-status"></div>
+          <button id="apply" class="btn primary">Apply</button>
+        </div>
+        </div>
+      </main>
+
+      <aside class="pending-rail">
+        <div class="pending-head">
+          <span class="pending-shield">🛡</span>
+          <span class="pending-title">Pending changes</span>
+          <span id="pending-count" class="chip amber" style="margin-left: auto;">0</span>
+        </div>
+        <div class="pending-sub">
+          Weakening changes are deferred. You cannot benefit from them until they activate.
+        </div>
+
+        <div id="pending-list" class="pending-list"></div>
+
+        <div class="pending-empty-hint" id="pending-empty-hint">
+          No queued items. Tightening changes apply instantly and don't appear here.
+        </div>
+
+        <div class="pending-foot">
+          <span class="tone-green">✓</span>
+          Cancel a queued change anytime before it activates.
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <script src="settings.js"></script>
+</body>
+</html>

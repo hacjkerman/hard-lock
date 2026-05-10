@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hard Lock</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="hud.css" />
+</head>
+<body>
+    <div class="hud-titlebar">
+      <div class="drag-dots" aria-hidden="true">
+        <span></span><span></span><span></span><span></span>
+      </div>
+      <div class="brand">HARD LOCK</div>
+      <div class="spacer"></div>
+      <div id="state-chip" class="chip">
+        <span class="dot"></span>
+        <span id="state-label">healthy</span>
+      </div>
+    </div>
+
+    <div class="hud-body">
+      <div class="big-time-row">
+        <span id="remaining" class="big-time tnum">--:--</span>
+        <span class="muted small">remaining today</span>
+      </div>
+      <div id="sub-usage" class="muted xs">of 0h daily cap · 0h 00m used</div>
+
+      <div id="progress" class="progress" style="margin-top: 10px;">
+        <div id="progress-fill" class="fill" style="width: 0%"></div>
+      </div>
+
+      <div id="cutoff-card" class="card cutoff-row">
+        <svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M8 1.5v5"></path>
+          <path d="M4.5 3.5a5.5 5.5 0 1 0 7 0"></path>
+        </svg>
+        <div class="grow">
+          <div class="label">Hard cutoff</div>
+          <div id="cutoff-text" class="value tnum">—</div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="open-settings" class="btn sm grow">Settings</button>
+        <button id="toggle-dry-run" class="btn sm grow" title="Toggle dry-run mode">Dry-run</button>
+      </div>
+
+      <div id="dry-run-note" class="muted xs center hidden">
+        DRY RUN — shutdown will be simulated
+      </div>
+    </div>
+
+  <script src="hud.js"></script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "daily_cap_minutes": 480,
+  "hard_cutoff_time": "23:30",
+  "warning_minutes_before": [30, 10, 5, 1],
+  "grace_seconds": 60,
+  "idle_threshold_seconds": 120,
+  "edit_cooldown_hours": 24,
+  "dry_run": true,
+  "pending_raise": null
+}

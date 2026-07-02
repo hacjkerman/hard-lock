@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hard Lock — Late night</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="session.css" />
+</head>
+<body>
+  <div class="session">
+    <div class="session-titlebar">
+      <div class="drag-dots" aria-hidden="true">
+        <span></span><span></span><span></span><span></span>
+      </div>
+      <div class="brand">HARD LOCK</div>
+      <div class="spacer"></div>
+      <div class="chip amber">Late night</div>
+    </div>
+
+    <div class="session-body">
+      <div class="eyebrow" id="eyebrow">It's after 23:00</div>
+      <h1 class="title">How long tonight?</h1>
+      <p class="subtitle">
+        Set a timer. When it runs out, this machine shuts down — with a
+        <span id="grace-note">60-second</span> grace, no cancel. You can't push
+        it past your hard cutoff.
+      </p>
+
+      <div class="picker">
+        <div class="picker-value">
+          <span id="minutes-value" class="tnum">30</span>
+          <span class="unit">min</span>
+        </div>
+
+        <input id="minutes-slider" class="slider" type="range" min="5" max="120" step="5" value="30" />
+        <div class="slider-labels tnum">
+          <span id="slider-min">5m</span>
+          <span id="slider-max">2h</span>
+        </div>
+
+        <div class="presets" id="presets"></div>
+      </div>
+
+      <div id="floor-note" class="floor-note">
+        <svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round">
+          <path d="M5.5 3.5A5.5 5.5 0 1011 3.6M8 2v5"></path>
+        </svg>
+        <span id="floor-text">Shuts down by your cutoff at the latest.</span>
+      </div>
+
+      <div class="spacer"></div>
+
+      <div class="session-footer">
+        <button id="skip" class="btn ghost">Not tonight</button>
+        <div class="spacer"></div>
+        <button id="start" class="btn primary lg">Start timer</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="session.js"></script>
+</body>
+</html>

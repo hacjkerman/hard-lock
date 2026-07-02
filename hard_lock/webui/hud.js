@@ -29,6 +29,11 @@ function render(status) {
     : "disabled";
   $("cutoff-text").textContent = cutoffText;
 
+  $("session-card").classList.toggle("hidden", !status.session_active);
+  if (status.session_active) {
+    $("session-text").textContent = `${status.session_remaining_hm} left`;
+  }
+
   $("dry-run-note").classList.toggle("hidden", !status.dry_run);
 
   for (const m of status.recent_warnings) {

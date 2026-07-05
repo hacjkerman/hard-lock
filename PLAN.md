@@ -95,16 +95,27 @@ real issues (0 false positives):
   `grace_seconds`.
 All covered by new tests (57 total, all passing).
 
-## Phase 4 — event log + history
+## Phase 4 — event log + history (done)
 
-- Append-only `events.jsonl`: writes from `apply_settings`,
-  `cancel_pending`, `initiate_shutdown`, warning fires, dry-run toggles.
-- Per-day summary archive (on reset, append `{date, active_seconds,
-  cap_minutes, hit_cap, hit_cutoff}` somewhere — `history.jsonl`).
-- Implement `HistoryView` from `design/components/surfaces.jsx`: 42-day bar
-  chart, streaks (derived at render time), recent events list.
-- Change daily reset from midnight → **04:00 local** to match the design.
-  Likely a new config field (e.g. `day_reset_hour: 4`).
+- ✅ Append-only `events.jsonl` + per-day `history.jsonl` (`hard_lock/history.py`:
+  `EventLog`, `DayHistory` — tolerant JSONL, torn lines skipped). Events logged
+  from `apply_settings`, `cancel_pending`, warning fires, shutdown (with reason +
+  dry-run), session-timer set, and day rollover.
+- ✅ Daily reset moved midnight → **04:00 local** via `day_reset_hour` (config)
+  and `Config.logical_date()`. `State` refactored into a dumb container; rollover
+  + archiving moved to `Api._roll_day` (runs at launch and each poll under the
+  poll lock). State snapshots the day's `cap_minutes` so the archive reflects the
+  cap that governed that day.
+- ✅ `HistoryView` (`webui/history.{html,css,js}`): 42-day bar chart with cap
+  line + shutdown markers, stat cards (streaks/avg/shutdowns), recent-events
+  list. Opened from a new HUD **History** button (`Api.get_history` / `open_history`).
+- **Hardening review** of the Phase 4 diff found + fixed 5 issues (0 false pos):
+  archive using the day's own cap (not current); dead History/Settings button
+  after close (subscribe to `events.closed`; was a pre-existing Settings bug too);
+  streaks no longer count never-used days; `get_history` rolls the day itself;
+  single `events.jsonl` read per call. Covered by tests (74 total, all passing).
+- Follow-ups: rotate/cap `events.jsonl` for very long-lived installs;
+  `day_reset_hour` in the settings UI; `hit_cutoff` in the day summary.
 
 ## Phase 5 — tray + onboarding
 

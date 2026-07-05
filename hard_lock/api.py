@@ -28,13 +28,17 @@ def _fmt_clock(seconds: float) -> str:
 
 class Api:
     def __init__(self, config, state, tracker, request_grace, open_settings,
-                 open_hud=None, session_deadline: "dt.datetime | None" = None):
+                 open_hud=None, session_deadline: "dt.datetime | None" = None,
+                 event_log=None, day_history=None, open_history=None):
         self.config = config
         self.state = state
         self.tracker = tracker
         self._request_grace = request_grace
         self._open_settings = open_settings
         self._open_hud = open_hud
+        self._open_history = open_history
+        self._event_log = event_log
+        self._day_history = day_history
         # Wall-clock deadline for the late-night session timer, or None.
         self._session_deadline = session_deadline
         self._warnings_fired: set[int] = set()
@@ -43,11 +47,52 @@ class Api:
         # call on its own thread, so a slow poll can overlap the next 1s tick;
         # without this, tracker.tick()/accumulate() double-count active time.
         self._poll_lock = threading.Lock()
+        # Archive a finished day (and reset the counter) if we launched into a
+        # new logical day since the last run.
+        self._roll_day()
 
     def session_remaining_seconds(self) -> "float | None":
         if self._session_deadline is None:
             return None
         return max(0.0, (self._session_deadline - dt.datetime.now()).total_seconds())
+
+    # ───────── day rollover + history ─────────
+    def _roll_day(self) -> None:
+        """If the logical day changed, archive the day that ended and reset the
+        counter. Called from __init__ and (under the poll lock) each poll."""
+        today = self.config.logical_date()
+        if self.state.date == today:
+            return
+        if self.state.date is not None:
+            # Use the cap that governed the ended day, not whatever it is now.
+            cap_minutes = self.state.cap_minutes
+            if cap_minutes is None:
+                cap_minutes = self.config.daily_cap_minutes
+            summary = {
+                "date": self.state.date,
+                "active_seconds": round(self.state.used_seconds, 1),
+                "cap_minutes": cap_minutes,
+                "hit_cap": self.state.used_seconds >= cap_minutes * 60,
+            }
+            if self._day_history is not None:
+                self._day_history.append_day(summary)
+            if self._event_log is not None:
+                self._event_log.append("day_rollover", **summary)
+        self.state.roll_to(today, self.config.daily_cap_minutes)
+        self._warnings_fired.clear()
+
+    def _log(self, event_type: str, **detail) -> None:
+        if self._event_log is not None:
+            self._event_log.append(event_type, **detail)
+
+    def _log_shutdown(self, cap_r, cutoff_r, session_r) -> None:
+        reason, tightest = "cap", cap_r
+        if cutoff_r is not None and cutoff_r <= tightest:
+            reason, tightest = "cutoff", cutoff_r
+        if session_r is not None and session_r <= tightest:
+            reason, tightest = "session", session_r
+        self._log("shutdown", reason=reason, dry_run=self.config.dry_run,
+                  used_seconds=round(self.state.used_seconds, 1))
 
     # ───────── late-night session prompt (shown at launch after the hour) ─────────
     def get_session_prompt_info(self) -> dict:
@@ -75,6 +120,7 @@ class Api:
             m = 0
         if m > 0:
             self._session_deadline = dt.datetime.now() + dt.timedelta(minutes=m)
+            self._log("session_timer", minutes=m)
         if self._open_hud:
             self._open_hud()
         return {"ok": True}
@@ -91,9 +137,16 @@ class Api:
         # state) is serialized so overlapping polls can't double-count time or
         # double-fire. The read-only snapshot is built afterwards from locals.
         with self._poll_lock:
+            # Roll to a new logical day (archiving the finished one) before
+            # anything reads/accumulates today's usage.
+            self._roll_day()
+
             # Activate any queued weakening changes that have come due, so they
             # apply to this running instance rather than waiting for a restart.
             self.config.refresh_pending()
+            # Keep today's cap snapshot current so the archive reflects the cap
+            # actually in force (it may have been tightened mid-day).
+            self.state.cap_minutes = self.config.daily_cap_minutes
 
             if not self._grace_requested:
                 delta = self.tracker.tick()
@@ -115,6 +168,7 @@ class Api:
 
             if not self._grace_requested and effective <= self.config.grace_seconds:
                 self._grace_requested = True
+                self._log_shutdown(cap_remaining, cutoff_remaining, session_remaining)
                 self._request_grace()
 
             used_seconds = self.state.used_seconds
@@ -157,12 +211,15 @@ class Api:
             "idle_threshold_seconds": self.config.idle_threshold_seconds,
             "edit_cooldown_hours": self.config.edit_cooldown_hours,
             "late_night_hour": self.config.late_night_hour,
+            "day_reset_hour": self.config.day_reset_hour,
             "dry_run": self.config.dry_run,
             "pending": self._pending_view(),
         }
 
     def apply_settings(self, new: dict) -> dict:
         applied, deferred = self.config.apply_settings(new)
+        if applied or deferred:
+            self._log("settings", applied=applied, deferred=deferred)
         return {
             "applied": applied,
             "deferred": deferred,
@@ -171,16 +228,23 @@ class Api:
 
     def cancel_pending(self, key: str) -> dict:
         ok = self.config.cancel_pending(key)
+        if ok:
+            self._log("pending_cancelled", key=key)
         return {"ok": ok, "pending": self._pending_view()}
 
     def open_settings(self) -> None:
         self._open_settings()
+
+    def open_history(self) -> None:
+        if self._open_history:
+            self._open_history()
 
     # ───────── internals ─────────
     def _maybe_fire_warnings(self, effective: float) -> None:
         for w in sorted(self.config.warning_minutes_before, reverse=True):
             if w not in self._warnings_fired and effective <= w * 60:
                 self._warnings_fired.add(w)
+                self._log("warning", minutes=w, remaining_seconds=round(effective, 1))
 
     def _pending_view(self) -> list[dict]:
         pending = self.config._data.get("pending_changes") or {}
@@ -198,3 +262,115 @@ class Api:
                 "remaining_hm": _fmt_hm(remaining),
             })
         return out
+
+    # ───────── history view ─────────
+    def get_history(self, days: int = 42) -> dict:
+        # Archive a just-finished day before rendering (the history window polls
+        # on its own timer, independent of the HUD). Serialize with the poll
+        # loop so the two can't roll concurrently; do the heavy file reads after.
+        with self._poll_lock:
+            self._roll_day()
+            today = self.config.logical_date()
+            today_active = self.state.used_seconds if self.state.date == today else 0.0
+
+        cap_minutes = self.config.daily_cap_minutes
+        by_date = self._day_history.by_date() if self._day_history is not None else {}
+        # Today is in progress — its live counter overrides any stale archive.
+        by_date[today] = {"date": today, "active_seconds": today_active, "cap_minutes": cap_minutes}
+
+        # Read the event log once; derive both shutdown days and the recent feed.
+        events = self._event_log.all() if self._event_log is not None else []
+        shutdown_dates = set()
+        for ev in events:
+            if ev.get("type") == "shutdown":
+                ld = self._logical_date_of(ev.get("ts"))
+                if ld:
+                    shutdown_dates.add(ld)
+
+        base = dt.date.fromisoformat(today)
+        window = []
+        for i in range(days - 1, -1, -1):
+            d = (base - dt.timedelta(days=i)).isoformat()
+            s = by_date.get(d)
+            active = float(s["active_seconds"]) if s else 0.0
+            cap_sec = (int(s["cap_minutes"]) if s and "cap_minutes" in s else cap_minutes) * 60
+            window.append({
+                "date": d,
+                "active_seconds": active,
+                "active_hm": _fmt_hm(active),
+                "active_hours": round(active / 3600, 3),
+                "cap_hours": round(cap_sec / 3600, 3),
+                "has_data": s is not None,
+                "hit_cap": bool(s) and cap_sec > 0 and active >= cap_sec,
+                "shutdown": d in shutdown_dates,
+            })
+
+        # Streaks only span days that actually have data — a never-used day is
+        # neither a success nor counted, so a 2-day-old install can't show "42".
+        current = 0
+        for day in reversed(window):
+            if not day["has_data"] or day["hit_cap"]:
+                break
+            current += 1
+        best = run = 0
+        for day in window:
+            run = run + 1 if (day["has_data"] and not day["hit_cap"]) else 0
+            best = max(best, run)
+        data_days = [d for d in window if d["has_data"]]
+        avg = sum(d["active_seconds"] for d in data_days) / len(data_days) if data_days else 0.0
+
+        recent = [self._event_view(e) for e in reversed(events[-10:])]
+        return {
+            "days": window,
+            "stats": {
+                "current_streak": current,
+                "best_streak": best,
+                "avg_active_hm": _fmt_hm(avg),
+                "shutdowns": sum(1 for d in window if d["shutdown"]),
+                "cap_hours": round(cap_minutes * 60 / 3600, 3),
+            },
+            "events": recent,
+        }
+
+    def _logical_date_of(self, ts) -> "str | None":
+        if not isinstance(ts, str):
+            return None
+        try:
+            return self.config.logical_date(dt.datetime.fromisoformat(ts))
+        except (TypeError, ValueError):
+            return None
+
+    def _event_view(self, e: dict) -> dict:
+        t = e.get("type")
+        ts = e.get("ts", "")
+        when = ts.replace("T", " ")[:16] if isinstance(ts, str) else ""
+        if t == "shutdown":
+            kind = "Dry-run shutdown" if e.get("dry_run") else "Shutdown"
+            label = f"{kind} · {e.get('reason', '')} reached"
+            tone = "red"
+        elif t == "warning":
+            label = f"Warning · {e.get('minutes')} min left"
+            tone = "amber"
+        elif t == "settings":
+            applied = e.get("applied") or []
+            deferred = e.get("deferred") or []
+            parts = []
+            if applied:
+                parts.append(f"{len(applied)} applied")
+            if deferred:
+                parts.append(f"{len(deferred)} deferred")
+            label = "Settings · " + (", ".join(parts) if parts else "changed")
+            tone = "amber" if deferred else "green"
+        elif t == "pending_cancelled":
+            label = f"Cancelled queued {e.get('key', '')}"
+            tone = "neutral"
+        elif t == "session_timer":
+            label = f"Late-night timer · {e.get('minutes')} min"
+            tone = "neutral"
+        elif t == "day_rollover":
+            label = f"Day archived · {_fmt_hm(e.get('active_seconds', 0))} active"
+            tone = "red" if e.get("hit_cap") else "green"
+        else:
+            label = str(t or "event")
+            tone = "neutral"
+        return {"when": when, "label": label, "tone": tone}

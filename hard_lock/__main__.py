@@ -65,14 +65,18 @@ def main(argv: "list[str] | None" = None) -> int:
     import webview
 
     from .api import Api
+    from .history import DayHistory, EventLog
     from .tracker import ActiveTimeTracker
     from .ui import GraceCountdown
 
     config = Config.load(CONFIG_PATH)
     state = State.load(STATE_PATH)
     tracker = ActiveTimeTracker(config.idle_threshold_seconds)
+    event_log = EventLog(paths.events_path())
+    day_history = DayHistory(paths.history_path())
 
     settings_window_ref: list = [None]
+    history_window_ref: list = [None]
     hud_window_ref: list = [None]
     prompt_window_ref: list = [None]
     grace_requested: list[bool] = [False]
@@ -108,6 +112,20 @@ def main(argv: "list[str] | None" = None) -> int:
             except Exception:
                 pass
 
+    def _track_window(ref: list, win) -> None:
+        # Clear the ref when the user closes the window. pywebview's show() on a
+        # destroyed window silently no-ops (doesn't raise), so without this the
+        # ref stays stale and the button that reopens it goes dead until restart.
+        ref[0] = win
+
+        def _on_closed(*_):
+            ref[0] = None
+
+        try:
+            win.events.closed += _on_closed
+        except Exception:
+            pass
+
     def open_settings() -> None:
         existing = settings_window_ref[0]
         if existing is not None:
@@ -124,7 +142,25 @@ def main(argv: "list[str] | None" = None) -> int:
             height=620,
             min_size=(760, 520),
         )
-        settings_window_ref[0] = win
+        _track_window(settings_window_ref, win)
+
+    def open_history() -> None:
+        existing = history_window_ref[0]
+        if existing is not None:
+            try:
+                existing.show()
+                return
+            except Exception:
+                history_window_ref[0] = None
+        win = webview.create_window(
+            "Hard Lock — History",
+            url=str(WEBUI_DIR / "history.html"),
+            js_api=api,
+            width=900,
+            height=640,
+            min_size=(760, 520),
+        )
+        _track_window(history_window_ref, win)
 
     api = Api(
         config=config,
@@ -133,6 +169,9 @@ def main(argv: "list[str] | None" = None) -> int:
         request_grace=request_grace,
         open_settings=open_settings,
         open_hud=open_hud,
+        open_history=open_history,
+        event_log=event_log,
+        day_history=day_history,
     )
 
     # After the configured late-night hour, open the session-timer prompt first

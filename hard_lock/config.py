@@ -12,6 +12,7 @@ DEFAULTS = {
     "idle_threshold_seconds": 120,
     "edit_cooldown_hours": 24,
     "late_night_hour": 23,
+    "day_reset_hour": 4,
     "dry_run": True,
     "pending_changes": {},
 }
@@ -182,6 +183,16 @@ class Config:
         """True when the session-timer prompt should fire at launch."""
         now = now or dt.datetime.now()
         return now.hour >= self.late_night_hour
+
+    @property
+    def day_reset_hour(self) -> int:
+        return int(self._data.get("day_reset_hour", 4))
+
+    def logical_date(self, now: dt.datetime | None = None) -> str:
+        """The usage 'day' key. The day rolls over at day_reset_hour (04:00 by
+        default), so time before then still counts toward the previous day."""
+        now = now or dt.datetime.now()
+        return (now - dt.timedelta(hours=self.day_reset_hour)).date().isoformat()
 
     @property
     def dry_run(self) -> bool:

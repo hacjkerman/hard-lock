@@ -67,6 +67,9 @@ function wire() {
   $("open-settings").addEventListener("click", () => {
     window.pywebview.api.open_settings();
   });
+  $("open-history").addEventListener("click", () => {
+    window.pywebview.api.open_history();
+  });
   $("toggle-dry-run").addEventListener("click", async () => {
     const settings = await window.pywebview.api.get_settings();
     await window.pywebview.api.apply_settings({ dry_run: !settings.dry_run });

@@ -1,6 +1,7 @@
 import sys
+import threading
 
-from . import autostart, paths
+from . import autostart, paths, tray
 from .config import Config
 from .state import State
 
@@ -79,19 +80,41 @@ def main(argv: "list[str] | None" = None) -> int:
     history_window_ref: list = [None]
     hud_window_ref: list = [None]
     prompt_window_ref: list = [None]
+    tray_ref: list = [None]
     grace_requested: list[bool] = [False]
+    # When True, the HUD's close button really closes (grace/quit); otherwise a
+    # close just hides it to the tray so the app keeps running in the background.
+    force_close: list[bool] = [False]
+    # Set true only for the programmatic hand-off destroy of the late-night
+    # prompt, so its hide-to-tray guard lets that one close through.
+    prompt_closing: list[bool] = [False]
 
-    def request_grace() -> None:
-        grace_requested[0] = True
+    def _teardown_windows() -> None:
+        force_close[0] = True
         try:
             for w in list(webview.windows):
                 w.destroy()
         except Exception:
             pass
+        if tray_ref[0] is not None:
+            try:
+                tray_ref[0].stop()
+            except Exception:
+                pass
+
+    def request_grace() -> None:
+        grace_requested[0] = True
+        _teardown_windows()
 
     def open_hud() -> None:
-        # Create the HUD first so there's always ≥1 window open, then dismiss
-        # the late-night prompt if it launched us.
+        # Reuse the HUD if it's just hidden to the tray.
+        existing = hud_window_ref[0]
+        if existing is not None:
+            try:
+                existing.show()
+                return
+            except Exception:
+                hud_window_ref[0] = None
         win = webview.create_window(
             "Hard Lock",
             url=str(WEBUI_DIR / "hud.html"),
@@ -104,9 +127,27 @@ def main(argv: "list[str] | None" = None) -> int:
             easy_drag=True,
         )
         hud_window_ref[0] = win
+
+        def _on_hud_closing():
+            # Hide to the tray instead of exiting — unless we're really shutting
+            # down (grace or Quit), in which case allow the close.
+            if force_close[0]:
+                return True
+            try:
+                win.hide()
+            except Exception:
+                pass
+            return False
+
+        try:
+            win.events.closing += _on_hud_closing
+        except Exception:
+            pass
+
         pw = prompt_window_ref[0]
         if pw is not None:
             prompt_window_ref[0] = None
+            prompt_closing[0] = True  # allow the hand-off destroy past the guard
             try:
                 pw.destroy()
             except Exception:
@@ -162,6 +203,14 @@ def main(argv: "list[str] | None" = None) -> int:
         )
         _track_window(history_window_ref, win)
 
+    def hide_hud() -> None:
+        win = hud_window_ref[0]
+        if win is not None:
+            try:
+                win.hide()
+            except Exception:
+                pass
+
     api = Api(
         config=config,
         state=state,
@@ -170,15 +219,45 @@ def main(argv: "list[str] | None" = None) -> int:
         open_settings=open_settings,
         open_hud=open_hud,
         open_history=open_history,
+        hide_hud=hide_hud,
         event_log=event_log,
         day_history=day_history,
+    )
+
+    # The clock runs on its own thread, independent of any window, so active
+    # time keeps accruing even while the HUD is hidden to the tray or the
+    # late-night prompt is up. get_status is now a read-only snapshot.
+    tick_stop = threading.Event()
+
+    def tick_loop() -> None:
+        while not tick_stop.wait(1.0):
+            try:
+                api.tick()
+            except Exception:
+                pass
+
+    ticker = threading.Thread(target=tick_loop, name="hardlock-ticker", daemon=True)
+    ticker.start()
+
+    # System tray: keeps the app alive in the background when the HUD is closed.
+    # Optional — if pystray/Pillow aren't available it simply doesn't appear.
+    def quit_app() -> None:
+        tick_stop.set()
+        _teardown_windows()  # sets force_close, destroys windows, stops tray
+
+    tray_ref[0] = tray.start_tray(
+        api,
+        on_show_hud=open_hud,
+        on_settings=open_settings,
+        on_history=open_history,
+        on_quit=quit_app,
     )
 
     # After the configured late-night hour, open the session-timer prompt first
     # and let it hand off to the HUD once the user commits (or skips). Otherwise
     # go straight to the HUD.
     if config.is_late_night():
-        prompt_window_ref[0] = webview.create_window(
+        prompt_win = webview.create_window(
             "Hard Lock — Late night",
             url=str(WEBUI_DIR / "session.html"),
             js_api=api,
@@ -189,10 +268,37 @@ def main(argv: "list[str] | None" = None) -> int:
             resizable=False,
             easy_drag=True,
         )
+        prompt_window_ref[0] = prompt_win
+
+        def _on_prompt_closing():
+            # The prompt is the ONLY window at this point (the HUD isn't created
+            # until commit/skip). Without this, closing it (Alt+F4) would exit
+            # the whole app and silently disable the lock. Hide to the tray
+            # instead — unless it's the hand-off destroy or a real shutdown.
+            if force_close[0] or prompt_closing[0]:
+                return True
+            try:
+                prompt_win.hide()
+            except Exception:
+                pass
+            return False
+
+        try:
+            prompt_win.events.closing += _on_prompt_closing
+        except Exception:
+            pass
     else:
         open_hud()
 
     webview.start(debug=False)
+
+    # Webview loop returned — stop the ticker and tray during shutdown.
+    tick_stop.set()
+    if tray_ref[0] is not None:
+        try:
+            tray_ref[0].stop()
+        except Exception:
+            pass
 
     # Main event loop returned. If grace was triggered, run the tkinter
     # countdown on the main thread — pywebview cannot coexist with a fresh

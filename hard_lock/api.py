@@ -29,7 +29,7 @@ def _fmt_clock(seconds: float) -> str:
 class Api:
     def __init__(self, config, state, tracker, request_grace, open_settings,
                  open_hud=None, session_deadline: "dt.datetime | None" = None,
-                 event_log=None, day_history=None, open_history=None):
+                 event_log=None, day_history=None, open_history=None, hide_hud=None):
         self.config = config
         self.state = state
         self.tracker = tracker
@@ -37,6 +37,7 @@ class Api:
         self._open_settings = open_settings
         self._open_hud = open_hud
         self._open_history = open_history
+        self._hide_hud = hide_hud
         self._event_log = event_log
         self._day_history = day_history
         # Wall-clock deadline for the late-night session timer, or None.
@@ -131,48 +132,57 @@ class Api:
             self._open_hud()
         return {"ok": True}
 
-    # ───────── called from HUD / settings on every poll ─────────
-    def get_status(self) -> dict:
-        # The mutating critical section (tick/accumulate/save + warning/grace
-        # state) is serialized so overlapping polls can't double-count time or
-        # double-fire. The read-only snapshot is built afterwards from locals.
-        with self._poll_lock:
-            # Roll to a new logical day (archiving the finished one) before
-            # anything reads/accumulates today's usage.
-            self._roll_day()
+    # ───────── the clock: owned by a single background thread ─────────
+    def _limits(self):
+        return (
+            self.config.remaining_seconds(self.state),
+            self.config.cutoff_remaining_seconds(),
+            self.session_remaining_seconds(),
+        )
 
-            # Activate any queued weakening changes that have come due, so they
-            # apply to this running instance rather than waiting for a restart.
+    @staticmethod
+    def _effective_from(cap_remaining, cutoff_remaining, session_remaining) -> float:
+        # Tightest of every active limit. The session timer only ever shortens
+        # this — it never extends past cap/cutoff.
+        effective = cap_remaining
+        for limit in (cutoff_remaining, session_remaining):
+            if limit is not None:
+                effective = min(effective, limit)
+        return effective
+
+    def tick(self) -> None:
+        """Advance the clock once: accumulate active time, fire warnings, and
+        trigger the grace/shutdown when time runs out. Driven by a single
+        background thread (see __main__) so tracking continues even when the HUD
+        is hidden to the tray. Serialized with settings writes via the lock."""
+        with self._poll_lock:
+            if self._grace_requested:
+                return
+            # Roll to a new logical day (archiving the finished one) first.
+            self._roll_day()
+            # Activate any queued weakening changes that have come due.
             self.config.refresh_pending()
             # Keep today's cap snapshot current so the archive reflects the cap
             # actually in force (it may have been tightened mid-day).
             self.state.cap_minutes = self.config.daily_cap_minutes
 
-            if not self._grace_requested:
-                delta = self.tracker.tick()
-                self.state.accumulate(delta)
-                self.state.save()
+            delta = self.tracker.tick()
+            self.state.accumulate(delta)
+            self.state.save()
 
-            cap_remaining = self.config.remaining_seconds(self.state)
-            cutoff_remaining = self.config.cutoff_remaining_seconds()
-            session_remaining = self.session_remaining_seconds()
-
-            # Effective time is the tightest of every active limit. The session
-            # timer only ever shortens this — never extends past cap/cutoff.
-            effective = cap_remaining
-            for limit in (cutoff_remaining, session_remaining):
-                if limit is not None:
-                    effective = min(effective, limit)
-
+            cap_remaining, cutoff_remaining, session_remaining = self._limits()
+            effective = self._effective_from(cap_remaining, cutoff_remaining, session_remaining)
             self._maybe_fire_warnings(effective)
-
-            if not self._grace_requested and effective <= self.config.grace_seconds:
+            if effective <= self.config.grace_seconds:
                 self._grace_requested = True
                 self._log_shutdown(cap_remaining, cutoff_remaining, session_remaining)
                 self._request_grace()
 
-            used_seconds = self.state.used_seconds
-
+    # ───────── read-only snapshot for the HUD / settings / tray ─────────
+    def get_status(self) -> dict:
+        cap_remaining, cutoff_remaining, session_remaining = self._limits()
+        effective = self._effective_from(cap_remaining, cutoff_remaining, session_remaining)
+        used_seconds = self.state.used_seconds
         cap_seconds = self.config.daily_cap_seconds
         used_pct = 0 if cap_seconds == 0 else min(100, 100 * used_seconds / cap_seconds)
 
@@ -238,6 +248,11 @@ class Api:
     def open_history(self) -> None:
         if self._open_history:
             self._open_history()
+
+    def hide_hud(self) -> None:
+        """Hide the HUD to the tray (the app keeps running in the background)."""
+        if self._hide_hud:
+            self._hide_hud()
 
     # ───────── internals ─────────
     def _maybe_fire_warnings(self, effective: float) -> None:

@@ -119,12 +119,34 @@ All covered by new tests (57 total, all passing).
 
 ## Phase 5 — tray + onboarding
 
-- System tray icon + menu (`pystray`) from
-  `design/components/surfaces.jsx` → `TrayMenu`. Implies a background
-  process model: closing the HUD does not exit the app.
-- Onboarding wizard (`design/components/surfaces.jsx` → `Onboarding`).
-  Design only specifies step 3 (limits). **Need to decide steps 1, 2, 4, 5
-  before building this phase.** Gated by a `setup_completed` flag in config.
+### Background process model + tray (done)
+
+- ✅ **Tick loop moved to a Python background thread** (`__main__.tick_loop` →
+  `Api.tick()`); `get_status` is now a read-only snapshot. Active-time tracking
+  and the grace/shutdown trigger no longer depend on the HUD's JS poll, so the
+  lock keeps enforcing when the HUD is hidden. Live-verified: the ticker drives
+  the full cutoff → warning → grace → dry-run shutdown chain.
+- ✅ **System tray** (`hard_lock/tray.py`, `pystray`) on a daemon thread —
+  Show HUD / Settings / History / Quit + a live status line. Defensive: if
+  pystray/Pillow are missing or the icon fails, the app runs without it (the
+  lock never depends on the tray).
+- ✅ **Hide-to-tray**: the frameless HUD gains a ✕ button (`Api.hide_hud`); a
+  `closing` handler hides the HUD (and the late-night prompt) instead of exiting
+  unless `force_close` (grace/Quit) is set. The app persists via the hidden
+  window so `webview.start()` keeps running.
+- **Review of the diff** found + fixed 1 HIGH (a dismissed false-positive too):
+  the late-night prompt had no `closing` guard, so Alt+F4 on it (the only window
+  at that point) called `Application.Exit()` and silently killed the lock —
+  fixed with the same hide-to-tray guard (verified live: WM_CLOSE hides, process
+  stays alive). 80 tests, all passing.
+- Notes: Quit is **enabled** (beta safety). The design shows "Quit disabled" as
+  the armed behavior — gate on an armed/`dry_run` flag later.
+
+### Onboarding wizard (todo — needs step decisions)
+
+- `design/components/surfaces.jsx` → `Onboarding`. Design only specifies step 3
+  (limits). **Steps 1, 2, 4, 5 undecided** — proposal pending sign-off. Gated by
+  a `setup_completed` flag in config; runs on first launch before the HUD.
 
 ## Deferred / open questions
 

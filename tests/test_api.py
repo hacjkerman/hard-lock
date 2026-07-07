@@ -37,6 +37,7 @@ def make(config_overrides=None, used_seconds=0.0, tracker_delta=0.0,
         request_grace=api_kwargs.get("request_grace", lambda: None),
         open_settings=lambda: None,
         open_hud=api_kwargs.get("open_hud", lambda: None),
+        hide_hud=api_kwargs.get("hide_hud"),
         event_log=event_log,
         day_history=day_history,
     )
@@ -73,6 +74,16 @@ class ApiStatusTestCase(unittest.TestCase):
         self.assertEqual(opened, [1])
         self.assertIsNotNone(api._session_deadline)
 
+    def test_hide_hud_calls_callback(self):
+        hidden = []
+        api, _, _ = make(hide_hud=lambda: hidden.append(1))
+        api.hide_hud()
+        self.assertEqual(hidden, [1])
+
+    def test_hide_hud_without_callback_is_noop(self):
+        api, _, _ = make()  # hide_hud is None
+        api.hide_hud()  # must not raise
+
     def test_skip_session_opens_hud_without_deadline(self):
         opened = []
         api, _, _ = make(open_hud=lambda: opened.append(1))
@@ -103,13 +114,20 @@ class ApiStatusTestCase(unittest.TestCase):
             used_seconds=60 * 60,
             request_grace=lambda: graced.append(1),
         )
-        api.get_status()
+        api.tick()
         self.assertEqual(graced, [1])
 
     def test_tracker_accumulates_into_state(self):
         api, _, state = make(tracker_delta=5.0)
-        api.get_status()
+        api.tick()
         self.assertEqual(state.used_seconds, 5.0)
+
+    def test_get_status_is_read_only(self):
+        # The read-only snapshot must not advance the clock; only tick() does.
+        api, _, state = make(tracker_delta=5.0)
+        api.get_status()
+        api.get_status()
+        self.assertEqual(state.used_seconds, 0.0)
 
     def test_get_settings_includes_late_night_hour(self):
         api, _, _ = make({"late_night_hour": 22})
@@ -202,7 +220,7 @@ class ApiStatusTestCase(unittest.TestCase):
              "grace_seconds": 60, "warning_minutes_before": [1]},
             used_seconds=3600.0, event_log=ev,
         )
-        api.get_status()
+        api.tick()
         types = [e["type"] for e in ev.recent()]
         self.assertIn("warning", types)
         self.assertIn("shutdown", types)
@@ -210,15 +228,15 @@ class ApiStatusTestCase(unittest.TestCase):
         self.assertEqual(shutdown["reason"], "cap")
         self.assertTrue(shutdown["dry_run"])
 
-    def test_due_pending_applies_during_status_poll(self):
+    def test_due_pending_applies_during_tick(self):
         """A queued cap-raise that has come due should activate while the app
-        is running (on the next status poll), not only after a restart."""
+        is running (on the next tick), not only after a restart."""
         api, config, _ = make({"daily_cap_minutes": 480, "edit_cooldown_hours": 24})
         config.apply_settings({"daily_cap_minutes": 600})
         past = (dt.datetime.now() - dt.timedelta(minutes=1)).isoformat()
         config._data["pending_changes"]["daily_cap_minutes"]["effective_at"] = past
 
-        api.get_status()
+        api.tick()
         self.assertEqual(config.daily_cap_minutes, 600)
 
 

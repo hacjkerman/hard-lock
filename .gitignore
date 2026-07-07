@@ -1,5 +1,9 @@
 config.json
 state.json
+events.jsonl
+history.jsonl
+*.corrupt
+*.tmp
 __pycache__/
 *.pyc
 *.pyo

@@ -1,19 +1,66 @@
 import sys
-from pathlib import Path
 
+from . import autostart, paths
 from .config import Config
 from .state import State
 
-PROJECT_DIR = Path(__file__).resolve().parent.parent
-CONFIG_PATH = PROJECT_DIR / "config.json"
-STATE_PATH = PROJECT_DIR / "state.json"
-WEBUI_DIR = Path(__file__).resolve().parent / "webui"
+CONFIG_PATH = paths.config_path()
+STATE_PATH = paths.state_path()
+WEBUI_DIR = paths.webui_dir()
 
 
-def main() -> int:
+USAGE = """Hard Lock - a self-imposed Windows shutdown lock.
+
+Usage:
+  HardLock                  Launch the app (HUD; late-night prompt after the hour).
+  HardLock --install        Install the logon task so it starts automatically.
+  HardLock --uninstall      Remove the logon task.
+  HardLock --status         Show whether autostart is installed.
+  HardLock --help           Show this help.
+"""
+
+
+def _emit(msg: str) -> None:
+    """Show a CLI result. A windowed (frozen) build has no console attached to
+    the invoking terminal, so also surface it as a dialog there."""
+    print(msg)
+    if paths.is_frozen():
+        try:
+            import ctypes
+
+            ctypes.windll.user32.MessageBoxW(0, msg, "Hard Lock", 0x40)
+        except Exception:
+            pass
+
+
+def _run_cli(argv: "list[str]") -> int:
+    arg = argv[0]
+    if arg in ("--install", "--install-autostart"):
+        ok, msg = autostart.install()
+        _emit(msg)
+        return 0 if ok else 1
+    if arg in ("--uninstall", "--uninstall-autostart"):
+        ok, msg = autostart.uninstall()
+        _emit(msg)
+        return 0 if ok else 1
+    if arg in ("--status", "--autostart-status"):
+        _emit(autostart.status())
+        return 0
+    if arg in ("--help", "-h", "/?"):
+        _emit(USAGE)
+        return 0
+    _emit(f"Unknown option: {arg}\n\n{USAGE}")
+    return 2
+
+
+def main(argv: "list[str] | None" = None) -> int:
     if sys.platform != "win32":
         print("Hard Lock v1 is Windows-only.", file=sys.stderr)
         return 1
+
+    argv = sys.argv[1:] if argv is None else argv
+    if argv:
+        return _run_cli(argv)
 
     import webview
 
@@ -26,6 +73,8 @@ def main() -> int:
     tracker = ActiveTimeTracker(config.idle_threshold_seconds)
 
     settings_window_ref: list = [None]
+    hud_window_ref: list = [None]
+    prompt_window_ref: list = [None]
     grace_requested: list[bool] = [False]
 
     def request_grace() -> None:
@@ -35,6 +84,29 @@ def main() -> int:
                 w.destroy()
         except Exception:
             pass
+
+    def open_hud() -> None:
+        # Create the HUD first so there's always ≥1 window open, then dismiss
+        # the late-night prompt if it launched us.
+        win = webview.create_window(
+            "Hard Lock",
+            url=str(WEBUI_DIR / "hud.html"),
+            js_api=api,
+            width=300,
+            height=280,
+            frameless=True,
+            on_top=True,
+            resizable=False,
+            easy_drag=True,
+        )
+        hud_window_ref[0] = win
+        pw = prompt_window_ref[0]
+        if pw is not None:
+            prompt_window_ref[0] = None
+            try:
+                pw.destroy()
+            except Exception:
+                pass
 
     def open_settings() -> None:
         existing = settings_window_ref[0]
@@ -60,19 +132,26 @@ def main() -> int:
         tracker=tracker,
         request_grace=request_grace,
         open_settings=open_settings,
+        open_hud=open_hud,
     )
 
-    webview.create_window(
-        "Hard Lock",
-        url=str(WEBUI_DIR / "hud.html"),
-        js_api=api,
-        width=300,
-        height=280,
-        frameless=True,
-        on_top=True,
-        resizable=False,
-        easy_drag=True,
-    )
+    # After the configured late-night hour, open the session-timer prompt first
+    # and let it hand off to the HUD once the user commits (or skips). Otherwise
+    # go straight to the HUD.
+    if config.is_late_night():
+        prompt_window_ref[0] = webview.create_window(
+            "Hard Lock — Late night",
+            url=str(WEBUI_DIR / "session.html"),
+            js_api=api,
+            width=460,
+            height=496,
+            frameless=True,
+            on_top=True,
+            resizable=False,
+            easy_drag=True,
+        )
+    else:
+        open_hud()
 
     webview.start(debug=False)
 

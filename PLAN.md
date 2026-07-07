@@ -31,14 +31,69 @@ tkinter stays as fallback for safety-critical screens until verified.
 - Keep tkinter `GraceCountdown` as a verified fallback until the pywebview
   takeover is confirmed reliable (topmost over fullscreen apps, no close).
 
-## Phase 3 — package + auto-start
+## Phase 3 — package + auto-start (done)
 
-- Bundle with PyInstaller into `HardLock.exe`.
-- Install a **Task Scheduler** task that runs `HardLock.exe` at logon.
-  (Chosen over Startup folder / Run key because it's not togglable from
-  Task Manager Startup tab; chosen over a Windows service because services
-  don't have a desktop session and the added IPC complexity isn't worth it
-  for a self-discipline tool that's honest about not being tamper-proof.)
+- ✅ Bundle with PyInstaller into `HardLock.exe` — `HardLock.spec` (onedir,
+  windowed), built via `build.bat`; webui assets bundled as datas; verified the
+  frozen exe launches and bootstraps `%APPDATA%\HardLock\config.json`.
+- ✅ Data path resolution split (`paths.py`): repo root in dev, `%APPDATA%\HardLock`
+  when frozen (previously wrote next to `__file__`, which breaks when packaged).
+- ✅ **Task Scheduler** logon task via `autostart.py` + CLI (`--install` /
+  `--uninstall` / `--status`), with self-elevating `packaging/*.bat` helpers.
+  (Chosen over Startup folder / Run key because it's not togglable from Task
+  Manager Startup tab; over a service because services lack a desktop session.)
+  Note: creating an ONLOGON task requires admin — handled with a clear message
+  + the self-elevating helper; confirmed on Win11 that non-elevated create fails
+  with Access Denied.
+- ✅ `launch.py` entry (runs by full path → repo root on `sys.path`, so the
+  logon task works regardless of working directory).
+- ✅ Optional Authenticode signing wired into `build.bat` (guarded on
+  `HARDLOCK_PFX`); documented in README. Still needs a real CA cert to clear
+  SmartScreen on other machines.
+- Follow-ups: obtain an OV/EV code-signing cert; optional MSI/installer; app icon.
+
+## Late-night session timer (shipped)
+
+- At launch (each logon/reopen), if `now.hour >= late_night_hour` (config,
+  default 23) a **pywebview prompt window** (`webui/session.{html,css,js}`)
+  opens first instead of the HUD, built to the Fluent design system
+  (`CooldownConfirm` / Onboarding "set your limits" surface). It asks for a
+  work window in minutes (preset chips + stepper), clamped to the floor already
+  left before cap/cutoff. On commit/skip it hands off to the HUD in the same
+  `webview.start()` loop via `Api.start_session_timer` / `skip_session_timer`
+  → `open_hud()` (HUD created first, then the prompt is destroyed).
+- The chosen minutes set a wall-clock deadline on `Api`. It folds into
+  `effective = min(cap, cutoff, session)`, so it can only ever *tighten* time
+  and reuses the existing warnings → grace → shutdown path.
+- Skip ⇒ no extra limit. Not persisted — fresh prompt every reopen (the
+  intended friction; honest that it's not tamper-proof).
+- Surfaced in the HUD as a "Late-night timer" card (`session_active`).
+- ✅ `late_night_hour` editable in the settings UI (0–24, 24 = off), validated,
+  round-trip verified; exposed via `get_settings`.
+- Follow-ups: escalating warning sounds (Phase 2) apply here too; optional
+  persistence-across-restart to close the kill-and-relaunch cheat; per-restart
+  minimum window.
+
+## Hardening review (done)
+
+Adversarial multi-agent review of the release-hardening diff found + fixed 6
+real issues (0 false positives):
+- Config `config.json` had an unsynchronized read-modify-write between the HUD
+  poll thread (`refresh_pending`) and the settings thread (`apply_settings`/
+  `cancel_pending`) → lost updates / torn file → reset to defaults. Fixed with a
+  reentrant `threading.Lock` around all mutation+save paths and **atomic writes**
+  (temp + `os.replace`) in both `Config.save` and `State.save`.
+- `State.load` crashed at logon on valid-but-non-object JSON (`AttributeError`).
+  Fixed with an `isinstance(dict)` guard.
+- `_apply_pending` ran outside the corrupt-file guard → a malformed
+  `pending_changes` entry crashed at logon and every poll. Now drops bad entries.
+- Clearing a settings number field sent `NaN`→`null` → `int(None)` crash that
+  dropped the whole edit batch. Added client-side validation for grace/idle/cooldown.
+- `get_status` had no re-entrancy guard → overlapping polls could double-count
+  active time. Serialized the poll critical section with a `Lock`.
+- Late-night prompt hardcoded "60-second grace"; now renders the real
+  `grace_seconds`.
+All covered by new tests (57 total, all passing).
 
 ## Phase 4 — event log + history
 

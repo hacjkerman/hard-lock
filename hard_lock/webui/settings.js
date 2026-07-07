@@ -53,6 +53,7 @@ function applyFormValues(settings) {
   $("grace_seconds").value = settings.grace_seconds;
   $("idle_threshold_seconds").value = settings.idle_threshold_seconds;
   $("edit_cooldown_hours").value = settings.edit_cooldown_hours;
+  $("late_night_hour").value = settings.late_night_hour;
   const toggle = $("dry_run");
   toggle.classList.toggle("on", !!settings.dry_run);
   $("dry-state").textContent = settings.dry_run ? "ON" : "OFF";
@@ -77,6 +78,7 @@ function readFormValues() {
     grace_seconds: parseInt($("grace_seconds").value, 10),
     idle_threshold_seconds: parseInt($("idle_threshold_seconds").value, 10),
     edit_cooldown_hours: parseInt($("edit_cooldown_hours").value, 10),
+    late_night_hour: parseInt($("late_night_hour").value, 10),
     dry_run: $("dry_run").classList.contains("on"),
   };
 }
@@ -121,6 +123,22 @@ function wire() {
     if (!Number.isFinite(form.daily_cap_minutes) || form.daily_cap_minutes < 0) {
       setStatus("Daily cap must be a non-negative number.", "err");
       return;
+    }
+    if (!Number.isFinite(form.late_night_hour) || form.late_night_hour < 0 || form.late_night_hour > 24) {
+      setStatus("Late-night hour must be between 0 and 24.", "err");
+      return;
+    }
+    // A cleared number field parses to NaN → JSON null → int(None) crash in
+    // apply_settings, dropping the whole batch. Reject before sending.
+    for (const [key, label] of [
+      ["grace_seconds", "Grace seconds"],
+      ["idle_threshold_seconds", "Idle threshold"],
+      ["edit_cooldown_hours", "Edit cooldown"],
+    ]) {
+      if (!Number.isFinite(form[key]) || form[key] < 0) {
+        setStatus(`${label} must be a non-negative number.`, "err");
+        return;
+      }
     }
     setStatus("Applying…");
     try {

@@ -1,0 +1,204 @@
+html, body {
+  height: 100%;
+  overflow: hidden;
+  background: var(--mica);
+  color: var(--text);
+}
+
+.session {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.session-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--titlebar);
+  border-bottom: 1px solid var(--divider);
+  -webkit-app-region: drag;
+}
+.session-titlebar .drag-dots {
+  display: flex;
+  gap: 3px;
+}
+.session-titlebar .drag-dots > span {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+}
+.session-titlebar .brand {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  color: var(--text-secondary);
+}
+.spacer { flex: 1; }
+
+.session-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 26px 22px;
+  min-height: 0;
+}
+
+.eyebrow {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--amber);
+  margin-bottom: 6px;
+}
+.title {
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.4px;
+  margin: 0 0 8px;
+}
+.subtitle {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0 0 18px;
+}
+
+/* ───────── Picker ───────── */
+.picker {
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.picker-value {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.picker-value > #minutes-value {
+  font-size: 44px;
+  font-weight: 300;
+  letter-spacing: -1.5px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.picker-value > .unit {
+  font-size: 15px;
+  color: var(--text-secondary);
+}
+
+/* ───────── Slider (matches Onboarding limit picker) ───────── */
+.slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  /* JS overrides with an accent→sunken gradient to show the fill. */
+  background: var(--surface-sunken);
+  outline: none;
+  margin: 2px 0 6px;
+  cursor: pointer;
+}
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--surface);
+  box-shadow: var(--shadow);
+  margin-top: -6px;
+  cursor: pointer;
+}
+.slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--surface);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+}
+.slider::-moz-range-track { height: 4px; border-radius: 2px; background: var(--surface-sunken); }
+.slider::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--accent); }
+.slider:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.slider-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text-tertiary);
+  margin-bottom: 14px;
+}
+
+.presets {
+  display: flex;
+  gap: 6px;
+}
+.preset {
+  flex: 1;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 0;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  transition: background 0.08s ease, color 0.08s ease;
+}
+.preset:hover:not(:disabled) { background: var(--surface-alt); }
+.preset.active {
+  background: var(--accent-subtle);
+  color: var(--accent);
+  border-color: transparent;
+}
+.preset:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* ───────── Floor note ───────── */
+.floor-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 10px 12px;
+  background: var(--accent-subtle);
+  border: 1px solid rgba(0, 103, 192, 0.16);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+.floor-note .icon {
+  width: 16px;
+  height: 16px;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+/* ───────── Footer ───────── */
+.session-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 16px;
+}
+.btn.ghost {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--text-secondary);
+}
+.btn.ghost:hover { background: var(--surface-sunken); }

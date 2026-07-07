@@ -115,6 +115,28 @@
 
         <section class="section">
           <div class="section-head">
+            <div class="section-title">Late-night timer</div>
+            <div class="section-sub">
+              Sign in at or after this hour and you're prompted to commit to a
+              work window before shutdown. Raising the hour (or 24 = off) is
+              <em>weakening</em> and waits out the cooldown.
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="row-label">
+              Prompt from hour (0–24)
+              <div class="row-note">24 disables the late-night prompt</div>
+            </div>
+            <div class="row-value">
+              <input id="late_night_hour" class="field" type="number" min="0" max="24" step="1" style="width: 100px;" />
+              <span class="muted xs" style="margin-left: 10px;">23 = 11 pm</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-head">
             <div class="section-title">Warnings</div>
             <div class="section-sub">Minutes-before-shutdown at which a warning fires. Comma-separated.</div>
           </div>

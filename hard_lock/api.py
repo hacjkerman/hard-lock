@@ -254,6 +254,59 @@ class Api:
         if self._hide_hud:
             self._hide_hud()
 
+    # ───────── first-run onboarding ─────────
+    def get_onboarding_info(self) -> dict:
+        return {
+            "daily_cap_minutes": self.config.daily_cap_minutes,
+            "hard_cutoff_time": self.config.hard_cutoff_time,
+            "late_night_hour": self.config.late_night_hour,
+            "dry_run": self.config.dry_run,
+        }
+
+    def finish_onboarding(self, payload: dict) -> dict:
+        """Persist the wizard's choices, mark setup complete, optionally install
+        the logon task, and hand off to the HUD."""
+        values = payload or {}
+
+        def _int(v, default):
+            try:
+                return int(v)
+            except (TypeError, ValueError):
+                return default
+
+        settings: dict = {}
+        if "daily_cap_minutes" in values:
+            settings["daily_cap_minutes"] = max(1, _int(values["daily_cap_minutes"], self.config.daily_cap_minutes))
+        if "hard_cutoff_time" in values:
+            t = values["hard_cutoff_time"]
+            settings["hard_cutoff_time"] = t or None
+        if "late_night_hour" in values:
+            settings["late_night_hour"] = min(24, max(0, _int(values["late_night_hour"], self.config.late_night_hour)))
+        if "dry_run" in values:
+            settings["dry_run"] = bool(values["dry_run"])
+
+        self.config.complete_setup(settings)
+        self._log("onboarding_completed", **settings)
+
+        autostart_result = None
+        if values.get("autostart"):
+            try:
+                from . import autostart
+
+                ok, msg = autostart.install()
+                autostart_result = {"ok": ok, "message": msg}
+            except Exception as exc:  # noqa: BLE001
+                autostart_result = {"ok": False, "message": str(exc)}
+
+        # The wizard shows any autostart failure before entering the app; it
+        # calls enter_app() to hand off to the HUD.
+        return {"ok": True, "autostart": autostart_result}
+
+    def enter_app(self) -> None:
+        """Leave the onboarding / prompt and open the HUD."""
+        if self._open_hud:
+            self._open_hud()
+
     # ───────── internals ─────────
     def _maybe_fire_warnings(self, effective: float) -> None:
         for w in sorted(self.config.warning_minutes_before, reverse=True):

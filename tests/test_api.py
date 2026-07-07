@@ -129,6 +129,50 @@ class ApiStatusTestCase(unittest.TestCase):
         api.get_status()
         self.assertEqual(state.used_seconds, 0.0)
 
+    # ───────── onboarding ─────────
+    def test_get_onboarding_info(self):
+        api, _, _ = make({"daily_cap_minutes": 480, "late_night_hour": 23})
+        info = api.get_onboarding_info()
+        self.assertEqual(info["daily_cap_minutes"], 480)
+        self.assertIn("dry_run", info)
+
+    def test_finish_onboarding_applies_and_completes(self):
+        opened = []
+        api, config, _ = make(open_hud=lambda: opened.append(1))
+        res = api.finish_onboarding({
+            "daily_cap_minutes": 300, "hard_cutoff_time": "22:00",
+            "late_night_hour": 21, "dry_run": False,
+        })
+        self.assertTrue(res["ok"])
+        self.assertIsNone(res["autostart"])
+        self.assertEqual(config.daily_cap_minutes, 300)
+        self.assertEqual(config.hard_cutoff_time, "22:00")
+        self.assertEqual(config.late_night_hour, 21)
+        self.assertFalse(config.dry_run)
+        self.assertTrue(config.setup_completed)
+        self.assertEqual(opened, [])  # finish does NOT open the HUD
+
+    def test_finish_onboarding_coerces_bad_values(self):
+        api, config, _ = make()
+        api.finish_onboarding({"daily_cap_minutes": "nope", "late_night_hour": 99})
+        self.assertGreaterEqual(config.daily_cap_minutes, 1)
+        self.assertLessEqual(config.late_night_hour, 24)
+        self.assertTrue(config.setup_completed)
+
+    def test_finish_onboarding_autostart_failure_reported(self):
+        from unittest import mock
+        api, _, _ = make()
+        with mock.patch("hard_lock.autostart.install", return_value=(False, "Access is denied")):
+            res = api.finish_onboarding({"autostart": True})
+        self.assertFalse(res["autostart"]["ok"])
+        self.assertIn("denied", res["autostart"]["message"].lower())
+
+    def test_enter_app_opens_hud(self):
+        opened = []
+        api, _, _ = make(open_hud=lambda: opened.append(1))
+        api.enter_app()
+        self.assertEqual(opened, [1])
+
     def test_get_settings_includes_late_night_hour(self):
         api, _, _ = make({"late_night_hour": 22})
         s = api.get_settings()

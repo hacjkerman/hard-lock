@@ -167,6 +167,25 @@ def main(argv: "list[str] | None" = None) -> int:
         except Exception:
             pass
 
+    def _attach_prompt_guard(win) -> None:
+        # The onboarding / late-night prompt is the ONLY window before the HUD
+        # exists. Without this, closing it (Alt+F4) would exit the whole app and
+        # silently disable the lock. Hide to the tray instead — unless it's the
+        # hand-off destroy (prompt_closing) or a real shutdown (force_close).
+        def _on_closing():
+            if force_close[0] or prompt_closing[0]:
+                return True
+            try:
+                win.hide()
+            except Exception:
+                pass
+            return False
+
+        try:
+            win.events.closing += _on_closing
+        except Exception:
+            pass
+
     def open_settings() -> None:
         existing = settings_window_ref[0]
         if existing is not None:
@@ -253,11 +272,23 @@ def main(argv: "list[str] | None" = None) -> int:
         on_quit=quit_app,
     )
 
-    # After the configured late-night hour, open the session-timer prompt first
-    # and let it hand off to the HUD once the user commits (or skips). Otherwise
-    # go straight to the HUD.
-    if config.is_late_night():
-        prompt_win = webview.create_window(
+    # First launch → onboarding wizard. Else after the late-night hour → the
+    # session-timer prompt. Otherwise straight to the HUD. Each front window
+    # hands off to the HUD (open_hud destroys it) and hides-to-tray on close.
+    if not config.setup_completed:
+        win = webview.create_window(
+            "Hard Lock — Setup",
+            url=str(WEBUI_DIR / "onboarding.html"),
+            js_api=api,
+            width=760,
+            height=560,
+            min_size=(680, 520),
+            on_top=True,
+        )
+        prompt_window_ref[0] = win
+        _attach_prompt_guard(win)
+    elif config.is_late_night():
+        win = webview.create_window(
             "Hard Lock — Late night",
             url=str(WEBUI_DIR / "session.html"),
             js_api=api,
@@ -268,25 +299,8 @@ def main(argv: "list[str] | None" = None) -> int:
             resizable=False,
             easy_drag=True,
         )
-        prompt_window_ref[0] = prompt_win
-
-        def _on_prompt_closing():
-            # The prompt is the ONLY window at this point (the HUD isn't created
-            # until commit/skip). Without this, closing it (Alt+F4) would exit
-            # the whole app and silently disable the lock. Hide to the tray
-            # instead — unless it's the hand-off destroy or a real shutdown.
-            if force_close[0] or prompt_closing[0]:
-                return True
-            try:
-                prompt_win.hide()
-            except Exception:
-                pass
-            return False
-
-        try:
-            prompt_win.events.closing += _on_prompt_closing
-        except Exception:
-            pass
+        prompt_window_ref[0] = win
+        _attach_prompt_guard(win)
     else:
         open_hud()
 

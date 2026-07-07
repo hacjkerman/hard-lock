@@ -221,6 +221,24 @@ class ConfigTestCase(unittest.TestCase):
         # File must still be valid JSON (no torn write survived).
         json.loads(self.path.read_text(encoding="utf-8-sig"))
 
+    # ───────── onboarding / setup ─────────
+    def test_setup_completed_defaults_false(self):
+        cfg = Config.load(self.path)
+        self.assertFalse(cfg.setup_completed)
+
+    def test_complete_setup_applies_directly_and_marks_done(self):
+        cfg = self._cfg(daily_cap_minutes=480, dry_run=True)
+        cfg.complete_setup({
+            "daily_cap_minutes": 300, "hard_cutoff_time": "22:00",
+            "dry_run": False, "not_a_setting": 1,
+        })
+        self.assertEqual(cfg.daily_cap_minutes, 300)
+        self.assertEqual(cfg.hard_cutoff_time, "22:00")
+        self.assertFalse(cfg.dry_run)  # set directly, no cooldown deferral
+        self.assertTrue(cfg.setup_completed)
+        self.assertNotIn("not_a_setting", cfg._data)  # unknown keys ignored
+        self.assertTrue(json.loads(self.path.read_text())["setup_completed"])
+
     # ───────── traffic-light + cutoff math ─────────
     def test_state_for_thresholds(self):
         cfg = self._cfg()

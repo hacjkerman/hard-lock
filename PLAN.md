@@ -142,11 +142,21 @@ All covered by new tests (57 total, all passing).
 - Notes: Quit is **enabled** (beta safety). The design shows "Quit disabled" as
   the armed behavior — gate on an armed/`dry_run` flag later.
 
-### Onboarding wizard (todo — needs step decisions)
+### Onboarding wizard (done)
 
-- `design/components/surfaces.jsx` → `Onboarding`. Design only specifies step 3
-  (limits). **Steps 1, 2, 4, 5 undecided** — proposal pending sign-off. Gated by
-  a `setup_completed` flag in config; runs on first launch before the HUD.
+- ✅ 5-step first-run wizard (`webui/onboarding.{html,css,js}`) gated by a
+  `setup_completed` config flag; shown before the HUD on first launch (takes
+  precedence over the late-night prompt), reusing the hide-to-tray guard.
+  Steps: welcome → how-it-works → set limits (cap slider + cutoff + late-night
+  hour) → arm (dry-run + autostart toggle) → recap.
+- ✅ `Config.complete_setup` sets the chosen values **directly** (initial setup
+  bypasses the weakening cooldown — nothing to weaken from yet) and marks setup
+  done. `Api.get_onboarding_info` / `finish_onboarding` (coerce + persist +
+  optional Task-Scheduler install, reporting admin failures) / `enter_app`.
+- Verified: 87 tests; wizard flow + autostart-failure path checked in-browser;
+  packaged exe shows "Hard Lock — Setup" on first run.
+- Follow-up: `day_reset_hour` and warnings aren't in the wizard (sensible
+  defaults); expose in Settings later.
 
 ## Deferred / open questions
 

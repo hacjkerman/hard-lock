@@ -6,6 +6,7 @@ from pathlib import Path
 
 from hard_lock.api import Api
 from hard_lock.config import Config
+from hard_lock.history import DayHistory, EventLog
 from hard_lock.state import State
 
 
@@ -19,13 +20,16 @@ class FakeTracker:
         return self.delta
 
 
-def make(config_overrides=None, used_seconds=0.0, tracker_delta=0.0, **api_kwargs):
+def make(config_overrides=None, used_seconds=0.0, tracker_delta=0.0,
+         event_log=None, day_history=None, state_date=None, state_cap_minutes=None,
+         **api_kwargs):
     d = Path(tempfile.mkdtemp())
     cpath, spath = d / "config.json", d / "state.json"
     if config_overrides:
         cpath.write_text(json.dumps(config_overrides))
     config = Config.load(cpath)
-    state = State(dt.date.today().isoformat(), used_seconds, spath)
+    # Default to today's logical day so Api.__init__ doesn't roll over.
+    state = State(state_date or config.logical_date(), used_seconds, spath, state_cap_minutes)
     api = Api(
         config=config,
         state=state,
@@ -33,6 +37,8 @@ def make(config_overrides=None, used_seconds=0.0, tracker_delta=0.0, **api_kwarg
         request_grace=api_kwargs.get("request_grace", lambda: None),
         open_settings=lambda: None,
         open_hud=api_kwargs.get("open_hud", lambda: None),
+        event_log=event_log,
+        day_history=day_history,
     )
     return api, config, state
 
@@ -116,6 +122,93 @@ class ApiStatusTestCase(unittest.TestCase):
         self.assertEqual(config.late_night_hour, 21)
         self.assertTrue(res["applied"])
         self.assertFalse(res["deferred"])
+
+    # ───────── Phase 4: rollover, history, events ─────────
+    def _loggers(self):
+        d = Path(tempfile.mkdtemp())
+        return EventLog(d / "events.jsonl"), DayHistory(d / "history.jsonl")
+
+    def test_day_rollover_archives_and_resets(self):
+        ev, dh = self._loggers()
+        api, config, state = make(
+            {"daily_cap_minutes": 480}, used_seconds=3600.0,
+            state_date="2020-01-01", event_log=ev, day_history=dh,
+        )
+        # Api.__init__ should have rolled the stale day over.
+        self.assertEqual(state.date, config.logical_date())
+        self.assertEqual(state.used_seconds, 0.0)
+        by = dh.by_date()
+        self.assertIn("2020-01-01", by)
+        self.assertEqual(by["2020-01-01"]["active_seconds"], 3600.0)
+        self.assertFalse(by["2020-01-01"]["hit_cap"])
+        self.assertIn("day_rollover", [e["type"] for e in ev.recent()])
+
+    def test_rollover_marks_hit_cap(self):
+        ev, dh = self._loggers()
+        # 10h used against an 8h cap → hit_cap
+        make({"daily_cap_minutes": 480}, used_seconds=36000.0,
+             state_date="2020-01-01", event_log=ev, day_history=dh)
+        self.assertTrue(dh.by_date()["2020-01-01"]["hit_cap"])
+
+    def test_rollover_uses_the_days_own_cap_not_current(self):
+        ev, dh = self._loggers()
+        # Yesterday's cap was 480 and 300 min (18000s) was used (under cap).
+        # The cap is now 120, but the archive must use the day's own cap.
+        make({"daily_cap_minutes": 120}, used_seconds=18000.0,
+             state_date="2020-01-01", state_cap_minutes=480,
+             event_log=ev, day_history=dh)
+        rec = dh.by_date()["2020-01-01"]
+        self.assertEqual(rec["cap_minutes"], 480)
+        self.assertFalse(rec["hit_cap"])  # 300 min < 480 min cap
+
+    def test_get_history_rolls_a_stale_day(self):
+        ev, dh = self._loggers()
+        api, config, state = make({"daily_cap_minutes": 480}, used_seconds=7200.0,
+                                  event_log=ev, day_history=dh)
+        # Simulate crossing the reset boundary before any HUD poll rolled over.
+        state.date = "2020-01-01"
+        state.cap_minutes = 480
+        api.get_history()  # must archive the stale day itself
+        self.assertIn("2020-01-01", dh.by_date())
+        self.assertEqual(state.date, config.logical_date())
+
+    def test_streaks_ignore_never_used_days(self):
+        # A fresh install (only today has data) must not show a 42-day streak.
+        api, _, _ = make({"daily_cap_minutes": 480}, used_seconds=3600.0)
+        stats = api.get_history()["stats"]
+        self.assertEqual(stats["current_streak"], 1)
+        self.assertEqual(stats["best_streak"], 1)
+
+    def test_get_history_window_and_today_live(self):
+        api, config, _ = make({"daily_cap_minutes": 480}, used_seconds=7200.0)
+        hist = api.get_history()
+        self.assertEqual(len(hist["days"]), 42)
+        last = hist["days"][-1]
+        self.assertEqual(last["date"], config.logical_date())
+        self.assertAlmostEqual(last["active_hours"], 2.0, places=2)
+        self.assertIn("current_streak", hist["stats"])
+        self.assertIn("events", hist)
+
+    def test_apply_settings_logs_event(self):
+        ev, _ = self._loggers()
+        api, _, _ = make({"daily_cap_minutes": 480}, event_log=ev)
+        api.apply_settings({"daily_cap_minutes": 120})  # tightening
+        self.assertIn("settings", [e["type"] for e in ev.recent()])
+
+    def test_warning_and_shutdown_events_logged(self):
+        ev, _ = self._loggers()
+        api, _, _ = make(
+            {"daily_cap_minutes": 60, "hard_cutoff_time": None,
+             "grace_seconds": 60, "warning_minutes_before": [1]},
+            used_seconds=3600.0, event_log=ev,
+        )
+        api.get_status()
+        types = [e["type"] for e in ev.recent()]
+        self.assertIn("warning", types)
+        self.assertIn("shutdown", types)
+        shutdown = next(e for e in ev.recent() if e["type"] == "shutdown")
+        self.assertEqual(shutdown["reason"], "cap")
+        self.assertTrue(shutdown["dry_run"])
 
     def test_due_pending_applies_during_status_poll(self):
         """A queued cap-raise that has come due should activate while the app

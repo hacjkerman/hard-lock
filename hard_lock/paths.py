@@ -35,6 +35,14 @@ def state_path() -> Path:
     return data_dir() / "state.json"
 
 
+def events_path() -> Path:
+    return data_dir() / "events.jsonl"
+
+
+def history_path() -> Path:
+    return data_dir() / "history.jsonl"
+
+
 def webui_dir() -> Path:
     """Bundled web assets — always alongside the package (PyInstaller keeps the
     package layout, so this resolves in both source and frozen builds)."""

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hard Lock — History</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="history.css" />
+</head>
+<body>
+  <div class="win">
+    <div class="win-titlebar">
+      <span class="accent-square"></span>
+      <span class="win-title">Hard Lock</span>
+      <span class="win-subtitle">History</span>
+    </div>
+
+    <div class="history-scroll">
+      <div class="history-inner">
+        <div class="eyebrow">Last 42 days</div>
+        <h1>History</h1>
+        <p class="intro">Active computer time per day. Shutdowns marked.</p>
+
+        <div class="stats-grid" id="stats-grid"></div>
+
+        <div class="card chart-card">
+          <div class="chart-head">
+            <div class="chart-title">Active time per day</div>
+            <div class="legend">
+              <span><i class="swatch" style="background: var(--accent)"></i>active</span>
+              <span><i class="swatch" style="background: var(--red)"></i>hit cap</span>
+              <span><i class="ring"></i>shutdown</span>
+            </div>
+          </div>
+          <div class="chart" id="chart"></div>
+          <div class="chart-axis" id="chart-axis"></div>
+        </div>
+
+        <div class="card events-card">
+          <div class="events-title">Recent lock events</div>
+          <div id="events-list" class="events-list"></div>
+          <div id="events-empty" class="events-empty hidden">No events recorded yet.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="history.js"></script>
+</body>
+</html>

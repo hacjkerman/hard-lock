@@ -14,6 +14,7 @@ DEFAULTS = {
     "late_night_hour": 23,
     "day_reset_hour": 4,
     "dry_run": True,
+    "setup_completed": False,
     "pending_changes": {},
 }
 
@@ -197,6 +198,27 @@ class Config:
     @property
     def dry_run(self) -> bool:
         return bool(self._data.get("dry_run", True))
+
+    @property
+    def setup_completed(self) -> bool:
+        return bool(self._data.get("setup_completed", False))
+
+    # Keys the first-run wizard may set directly. Initial setup establishes the
+    # baseline, so it bypasses the weakening cooldown (there's nothing to weaken
+    # from yet).
+    _SETUP_KEYS = frozenset({
+        "daily_cap_minutes", "hard_cutoff_time", "warning_minutes_before",
+        "grace_seconds", "idle_threshold_seconds", "edit_cooldown_hours",
+        "late_night_hour", "day_reset_hour", "dry_run",
+    })
+
+    def complete_setup(self, values: dict) -> None:
+        with self._lock:
+            for key, value in (values or {}).items():
+                if key in self._SETUP_KEYS:
+                    self._data[key] = value
+            self._data["setup_completed"] = True
+            self.save()
 
     def remaining_seconds(self, state) -> float:
         return max(0.0, self.daily_cap_seconds - state.used_seconds)

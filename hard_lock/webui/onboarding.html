@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hard Lock — Setup</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="onboarding.css" />
+</head>
+<body>
+  <div class="win">
+    <div class="win-titlebar">
+      <span class="accent-square"></span>
+      <span class="win-title">Hard Lock</span>
+      <span class="win-subtitle">Setup</span>
+    </div>
+
+    <div class="ob">
+      <div class="dots" id="dots"></div>
+
+      <div class="ob-body">
+        <!-- 1 · Welcome -->
+        <section class="step" data-step="0">
+          <div class="eyebrow">Step 1 of 5 · Welcome</div>
+          <h1>A lock you set for yourself.</h1>
+          <p class="lead">
+            Hard Lock shuts your computer down when you hit a daily limit or a
+            nightly cutoff you choose — while you're rested enough to choose well.
+          </p>
+          <div class="note">
+            <strong>Honest up front:</strong> this is friction, not security.
+            Anyone determined can end the process or remove the task. It's built
+            to make the easy path the one you actually wanted.
+          </div>
+        </section>
+
+        <!-- 2 · How it works -->
+        <section class="step hidden" data-step="1">
+          <div class="eyebrow">Step 2 of 5 · How it works</div>
+          <h1>Two limits, one rule.</h1>
+          <div class="cards2">
+            <div class="mini-card">
+              <div class="mini-title">Daily active cap</div>
+              <p>Counts time you're actually at the keyboard. Idle time doesn't
+                count. When it runs out, the machine shuts down.</p>
+            </div>
+            <div class="mini-card">
+              <div class="mini-title">Hard cutoff</div>
+              <p>A wall-clock time after which the machine won't stay on — no
+                matter how much cap you have left.</p>
+            </div>
+          </div>
+          <div class="note amber-note">
+            <strong>Tighten now, loosen later.</strong> Making the lock stricter
+            takes effect immediately. Making it looser (raising the cap, pushing
+            the cutoff later) waits out a cooldown — so a tired 1 a.m. you can't
+            undo what rested you decided.
+          </div>
+        </section>
+
+        <!-- 3 · Set your limits -->
+        <section class="step hidden" data-step="2">
+          <div class="eyebrow">Step 3 of 5 · Set your limits</div>
+          <h1>How much is too much?</h1>
+          <p class="lead">Pick numbers your <em>rested</em> self would pick.</p>
+
+          <div class="limit-card">
+            <div class="limit-head">
+              <span class="limit-label">Daily active cap</span>
+              <span class="limit-value"><span id="cap-val" class="tnum">8</span>h</span>
+            </div>
+            <input id="cap" class="slider" type="range" min="1" max="16" step="0.5" value="8" />
+            <div class="slider-ends"><span>1h</span><span>16h</span></div>
+          </div>
+
+          <div class="limit-row">
+            <div class="limit-card grow">
+              <div class="limit-head"><span class="limit-label">Hard cutoff</span></div>
+              <input id="cutoff" class="field" type="time" value="23:30" />
+              <div class="field-note">blank = no cutoff</div>
+            </div>
+            <div class="limit-card">
+              <div class="limit-head"><span class="limit-label">Late-night prompt from</span></div>
+              <input id="latenight" class="field tnum" type="number" min="0" max="24" step="1" value="23" style="width: 84px;" />
+              <div class="field-note">24 = off</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 4 · Arm it -->
+        <section class="step hidden" data-step="3">
+          <div class="eyebrow">Step 4 of 5 · Arm it</div>
+          <h1>Try it, or arm it.</h1>
+          <div class="toggle-row">
+            <div class="toggle-copy">
+              <div class="toggle-title">Dry-run mode</div>
+              <div class="toggle-sub">Simulates the shutdown instead of performing it — safe to try. Turn off to make it real.</div>
+            </div>
+            <div class="toggle on" id="dry_run"><div class="knob"></div></div>
+          </div>
+          <div class="toggle-row">
+            <div class="toggle-copy">
+              <div class="toggle-title">Start at logon</div>
+              <div class="toggle-sub">Runs Hard Lock automatically when you sign in (installs a Task Scheduler task — needs administrator once).</div>
+            </div>
+            <div class="toggle" id="autostart"><div class="knob"></div></div>
+          </div>
+        </section>
+
+        <!-- 5 · Done -->
+        <section class="step hidden" data-step="4">
+          <div class="eyebrow">Step 5 of 5 · You're set</div>
+          <h1>That's the decision.</h1>
+          <div class="recap" id="recap"></div>
+          <div class="note">
+            You'll find Hard Lock in the system tray. Loosening these limits from
+            Settings always waits out the cooldown.
+          </div>
+          <div id="autostart-msg" class="note amber-note hidden"></div>
+        </section>
+      </div>
+
+      <div class="ob-footer">
+        <button id="back" class="btn" disabled>Back</button>
+        <div class="spacer"></div>
+        <span id="hint" class="muted xs">cooldown defaults to 24h</span>
+        <button id="next" class="btn primary lg">Continue</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="onboarding.js"></script>
+</body>
+</html>

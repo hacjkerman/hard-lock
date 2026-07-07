@@ -7,9 +7,9 @@ datas = [("hard_lock/webui", "hard_lock/webui")]
 binaries = []
 hiddenimports = []
 
-# pywebview pulls in its platform backends dynamically; collect them all so the
-# frozen build finds the WebView2/EdgeChromium backend at runtime.
-for pkg in ("webview",):
+# pywebview pulls in its platform backends dynamically; pystray likewise loads a
+# platform backend by name. collect_all so the frozen build finds them at runtime.
+for pkg in ("webview", "pystray", "PIL"):
     d, b, h = collect_all(pkg)
     datas += d
     binaries += b

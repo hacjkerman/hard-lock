@@ -70,6 +70,9 @@ function wire() {
   $("open-history").addEventListener("click", () => {
     window.pywebview.api.open_history();
   });
+  $("hud-hide").addEventListener("click", () => {
+    window.pywebview.api.hide_hud();
+  });
   $("toggle-dry-run").addEventListener("click", async () => {
     const settings = await window.pywebview.api.get_settings();
     await window.pywebview.api.apply_settings({ dry_run: !settings.dry_run });

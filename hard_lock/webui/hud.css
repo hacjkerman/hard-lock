@@ -37,6 +37,23 @@ body {
 }
 .spacer { flex: 1; }
 
+.hud-x {
+  -webkit-app-region: no-drag;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+.hud-x:hover { background: var(--red-bg); color: var(--red); }
+.hud-x svg { width: 10px; height: 10px; }
+
 .hud-body {
   padding: 14px 16px 16px;
 }

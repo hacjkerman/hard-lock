@@ -41,7 +41,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    # icon="assets/hardlock.ico",   # add when an icon asset exists
+    icon="assets/hardlock.ico",
 )
 
 coll = COLLECT(

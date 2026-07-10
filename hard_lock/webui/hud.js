@@ -33,6 +33,7 @@ function render(status) {
   if (status.session_active) {
     $("session-text").textContent = `${status.session_remaining_hm} left`;
   }
+  $("timer-btn-label").textContent = status.session_active ? "Change work timer" : "Set a work timer";
 
   $("dry-run-note").classList.toggle("hidden", !status.dry_run);
 
@@ -72,6 +73,9 @@ function wire() {
   });
   $("hud-hide").addEventListener("click", () => {
     window.pywebview.api.hide_hud();
+  });
+  $("open-timer").addEventListener("click", () => {
+    window.pywebview.api.open_session_prompt();
   });
   $("toggle-dry-run").addEventListener("click", async () => {
     const settings = await window.pywebview.api.get_settings();

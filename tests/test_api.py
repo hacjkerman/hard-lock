@@ -38,6 +38,7 @@ def make(config_overrides=None, used_seconds=0.0, tracker_delta=0.0,
         open_settings=lambda: None,
         open_hud=api_kwargs.get("open_hud", lambda: None),
         hide_hud=api_kwargs.get("hide_hud"),
+        open_session_prompt=api_kwargs.get("open_session_prompt"),
         event_log=event_log,
         day_history=day_history,
     )
@@ -79,6 +80,17 @@ class ApiStatusTestCase(unittest.TestCase):
         api, _, _ = make(hide_hud=lambda: hidden.append(1))
         api.hide_hud()
         self.assertEqual(hidden, [1])
+
+    def test_open_session_prompt_calls_callback(self):
+        opened = []
+        api, _, _ = make(open_session_prompt=lambda: opened.append(1))
+        api.open_session_prompt()
+        self.assertEqual(opened, [1])
+
+    def test_session_prompt_info_reports_late_night(self):
+        api, _, _ = make({"late_night_hour": 23})
+        info = api.get_session_prompt_info()
+        self.assertIn("is_late_night", info)
 
     def test_hide_hud_without_callback_is_noop(self):
         api, _, _ = make()  # hide_hud is None

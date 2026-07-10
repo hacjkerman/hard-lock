@@ -1,0 +1,11 @@
+<svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Hard Lock">
+  <title>Hard Lock</title>
+  <rect x="16" y="16" width="224" height="224" rx="56" fill="#cf3020"/>
+  <!-- shackle -->
+  <path d="M100 122 V96 a28 28 0 0 1 56 0 V122" fill="none" stroke="#ffffff" stroke-width="16" stroke-linecap="round"/>
+  <!-- body -->
+  <rect x="76" y="116" width="104" height="90" rx="16" fill="#ffffff"/>
+  <!-- keyhole = power symbol (lock + shutdown) -->
+  <path d="M137.75 150.1 A17 17 0 1 1 118.25 150.1" fill="none" stroke="#cf3020" stroke-width="7" stroke-linecap="round"/>
+  <line x1="128" y1="143" x2="128" y2="163" stroke="#cf3020" stroke-width="7" stroke-linecap="round"/>
+</svg>

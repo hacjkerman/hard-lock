@@ -96,3 +96,5 @@ h1 { font-size: 26px; font-weight: 600; letter-spacing: -0.3px; margin: 2px 0 4p
 .events-empty { font-size: 12px; color: var(--text-tertiary); padding: 8px 0; }
 
 .hidden { display: none !important; }
+
+.brand-mark { display: block; flex-shrink: 0; }

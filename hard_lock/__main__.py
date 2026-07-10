@@ -106,12 +106,26 @@ def main(argv: "list[str] | None" = None) -> int:
         grace_requested[0] = True
         _teardown_windows()
 
+    def _dismiss_prompt() -> None:
+        # Tear down the onboarding / session-timer prompt after the hand-off.
+        # Called only once the HUD is guaranteed to exist, so there's never a
+        # moment with zero windows (which would end webview.start()).
+        pw = prompt_window_ref[0]
+        if pw is not None:
+            prompt_window_ref[0] = None
+            prompt_closing[0] = True  # allow the hand-off destroy past the guard
+            try:
+                pw.destroy()
+            except Exception:
+                pass
+
     def open_hud() -> None:
         # Reuse the HUD if it's just hidden to the tray.
         existing = hud_window_ref[0]
         if existing is not None:
             try:
                 existing.show()
+                _dismiss_prompt()  # HUD already up (on-demand path) → safe to destroy now
                 return
             except Exception:
                 hud_window_ref[0] = None
@@ -144,14 +158,8 @@ def main(argv: "list[str] | None" = None) -> int:
         except Exception:
             pass
 
-        pw = prompt_window_ref[0]
-        if pw is not None:
-            prompt_window_ref[0] = None
-            prompt_closing[0] = True  # allow the hand-off destroy past the guard
-            try:
-                pw.destroy()
-            except Exception:
-                pass
+        # HUD now exists → tear down the prompt (launch hand-off).
+        _dismiss_prompt()
 
     def _track_window(ref: list, win) -> None:
         # Clear the ref when the user closes the window. pywebview's show() on a
@@ -230,6 +238,31 @@ def main(argv: "list[str] | None" = None) -> int:
             except Exception:
                 pass
 
+    def open_session_prompt() -> None:
+        # The "set a work timer" prompt, used both at late-night launch and
+        # on demand from the HUD. Reuses the session window if it's still up.
+        existing = prompt_window_ref[0]
+        if existing is not None:
+            try:
+                existing.show()
+                return
+            except Exception:
+                prompt_window_ref[0] = None
+        prompt_closing[0] = False  # fresh prompt: its close hides, not exits
+        win = webview.create_window(
+            "Hard Lock — Set timer",
+            url=str(WEBUI_DIR / "session.html"),
+            js_api=api,
+            width=460,
+            height=496,
+            frameless=True,
+            on_top=True,
+            resizable=False,
+            easy_drag=True,
+        )
+        prompt_window_ref[0] = win
+        _attach_prompt_guard(win)
+
     api = Api(
         config=config,
         state=state,
@@ -239,6 +272,7 @@ def main(argv: "list[str] | None" = None) -> int:
         open_hud=open_hud,
         open_history=open_history,
         hide_hud=hide_hud,
+        open_session_prompt=open_session_prompt,
         event_log=event_log,
         day_history=day_history,
     )
@@ -288,19 +322,7 @@ def main(argv: "list[str] | None" = None) -> int:
         prompt_window_ref[0] = win
         _attach_prompt_guard(win)
     elif config.is_late_night():
-        win = webview.create_window(
-            "Hard Lock — Late night",
-            url=str(WEBUI_DIR / "session.html"),
-            js_api=api,
-            width=460,
-            height=496,
-            frameless=True,
-            on_top=True,
-            resizable=False,
-            easy_drag=True,
-        )
-        prompt_window_ref[0] = win
-        _attach_prompt_guard(win)
+        open_session_prompt()
     else:
         open_hud()
 

@@ -29,7 +29,8 @@ def _fmt_clock(seconds: float) -> str:
 class Api:
     def __init__(self, config, state, tracker, request_grace, open_settings,
                  open_hud=None, session_deadline: "dt.datetime | None" = None,
-                 event_log=None, day_history=None, open_history=None, hide_hud=None):
+                 event_log=None, day_history=None, open_history=None, hide_hud=None,
+                 open_session_prompt=None):
         self.config = config
         self.state = state
         self.tracker = tracker
@@ -38,6 +39,7 @@ class Api:
         self._open_hud = open_hud
         self._open_history = open_history
         self._hide_hud = hide_hud
+        self._open_session_prompt = open_session_prompt
         self._event_log = event_log
         self._day_history = day_history
         # Wall-clock deadline for the late-night session timer, or None.
@@ -111,6 +113,7 @@ class Api:
             "cutoff_remaining_hm": _fmt_hm(cutoff_remaining) if cutoff_remaining is not None else None,
             "late_night_hour": self.config.late_night_hour,
             "grace_seconds": self.config.grace_seconds,
+            "is_late_night": self.config.is_late_night(),
         }
 
     def start_session_timer(self, minutes) -> dict:
@@ -248,6 +251,12 @@ class Api:
     def open_history(self) -> None:
         if self._open_history:
             self._open_history()
+
+    def open_session_prompt(self) -> None:
+        """Open the 'set a work timer' prompt on demand (any time, not just at
+        the late-night launch)."""
+        if self._open_session_prompt:
+            self._open_session_prompt()
 
     def hide_hud(self) -> None:
         """Hide the HUD to the tray (the app keeps running in the background)."""

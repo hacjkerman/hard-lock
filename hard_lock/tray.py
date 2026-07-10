@@ -8,15 +8,37 @@ own message loop on a daemon thread alongside pywebview's loop.
 import threading
 
 
-def make_image(rgb=(76, 194, 255, 255)):
-    """A small padlock glyph for the tray icon."""
+def make_image(size=64):
+    """The Hard Lock mark: a red badge with a white padlock whose keyhole is a
+    power symbol (lock + shutdown). Drawn at high resolution and downscaled so
+    it's smooth at any size. Shared by the tray and the .ico generator."""
     from PIL import Image, ImageDraw
 
-    img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+    S = 512  # supersample, then downscale to `size`
+    img = Image.new("RGBA", (S, S), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    d.arc([22, 12, 42, 40], start=180, end=360, fill=rgb, width=5)   # shackle
-    d.rounded_rectangle([17, 28, 47, 52], radius=5, fill=rgb)        # body
-    d.ellipse([30, 37, 34, 45], fill=(24, 24, 24, 255))             # keyhole
+
+    def u(v):  # design coordinates are in a 256-unit space
+        return v * S / 256.0
+
+    RED = (207, 48, 32, 255)
+    WHITE = (255, 255, 255, 255)
+
+    d.rounded_rectangle([u(16), u(16), u(240), u(240)], radius=u(56), fill=RED)
+
+    sw = max(2, int(u(16)))  # shackle stroke
+    d.arc([u(100), u(68), u(156), u(124)], start=180, end=360, fill=WHITE, width=sw)
+    d.line([u(100), u(96), u(100), u(122)], fill=WHITE, width=sw)
+    d.line([u(156), u(96), u(156), u(122)], fill=WHITE, width=sw)
+
+    d.rounded_rectangle([u(76), u(116), u(180), u(206)], radius=u(16), fill=WHITE)
+
+    pw = max(2, int(u(7)))  # power-symbol keyhole
+    d.arc([u(111), u(147), u(145), u(181)], start=305, end=595, fill=RED, width=pw)
+    d.line([u(128), u(143), u(128), u(163)], fill=RED, width=pw)
+
+    if size != S:
+        img = img.resize((size, size), Image.LANCZOS)
     return img
 
 

@@ -56,9 +56,15 @@ async function init() {
     maxMinutes = Math.max(1, info.max_minutes);
     minMinutes = Math.min(5, maxMinutes);
 
-    if (info.late_night_hour != null) {
+    if (info.is_late_night) {
       const hh = String(info.late_night_hour).padStart(2, "0");
       $("eyebrow").textContent = `It's after ${hh}:00`;
+    } else {
+      // Opened on demand (not late night) — reword for a plain manual timer.
+      $("eyebrow").textContent = "Manual work timer";
+      $("prompt-title").textContent = "How long do you want to work?";
+      const chip = $("prompt-chip");
+      if (chip) { chip.textContent = "Timer"; }
     }
     if (Number.isFinite(info.grace_seconds)) {
       $("grace-note").textContent = `${info.grace_seconds}-second`;

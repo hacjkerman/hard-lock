@@ -181,9 +181,20 @@ class Config:
         return int(self._data.get("late_night_hour", 23))
 
     def is_late_night(self, now: dt.datetime | None = None) -> bool:
-        """True when the session-timer prompt should fire at launch."""
-        now = now or dt.datetime.now()
-        return now.hour >= self.late_night_hour
+        """True when the session-timer prompt should fire at launch. The window
+        runs from late_night_hour until the day resets (day_reset_hour), so it
+        WRAPS past midnight — e.g. 23:00 → 04:00, not just 23:00–23:59."""
+        start = self.late_night_hour
+        if start >= 24:
+            return False  # 24 = off
+        start %= 24
+        end = self.day_reset_hour % 24
+        h = (now or dt.datetime.now()).hour
+        if start == end:
+            return False
+        if start < end:
+            return start <= h < end
+        return h >= start or h < end
 
     @property
     def day_reset_hour(self) -> int:

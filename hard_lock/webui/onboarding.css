@@ -75,3 +75,5 @@ h1 { font-size: 27px; font-weight: 600; letter-spacing: -0.5px; margin: 0 0 12px
 .ob-footer { display: flex; align-items: center; gap: 10px; padding-top: 16px; }
 .btn:disabled { opacity: 0.4; cursor: default; }
 .hidden { display: none !important; }
+
+.brand-mark { display: block; flex-shrink: 0; }

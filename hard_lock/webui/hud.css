@@ -105,10 +105,20 @@ body {
 }
 .grow { flex: 1; }
 
+.timer-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 14px;
+}
+.timer-btn .tico { width: 13px; height: 13px; }
+
 .actions {
   display: flex;
   gap: 8px;
-  margin-top: 12px;
+  margin-top: 8px;
 }
 
 .hidden { display: none; }

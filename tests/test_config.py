@@ -94,11 +94,27 @@ class ConfigTestCase(unittest.TestCase):
         self.assertEqual(cfg.late_night_hour, 21)
         self.assertTrue(applied)
 
-    def test_is_late_night(self):
-        cfg = self._cfg(late_night_hour=23)
+    def test_is_late_night_wraps_past_midnight(self):
+        # Window is late_night_hour (23) .. day_reset_hour (4), wrapping midnight.
+        cfg = self._cfg(late_night_hour=23, day_reset_hour=4)
         self.assertTrue(cfg.is_late_night(dt.datetime(2026, 7, 2, 23, 0)))
         self.assertTrue(cfg.is_late_night(dt.datetime(2026, 7, 2, 23, 59)))
+        self.assertTrue(cfg.is_late_night(dt.datetime(2026, 7, 2, 0, 30)))   # past midnight
+        self.assertTrue(cfg.is_late_night(dt.datetime(2026, 7, 2, 3, 59)))
+        self.assertFalse(cfg.is_late_night(dt.datetime(2026, 7, 2, 4, 0)))   # after reset
         self.assertFalse(cfg.is_late_night(dt.datetime(2026, 7, 2, 22, 59)))
+        self.assertFalse(cfg.is_late_night(dt.datetime(2026, 7, 2, 12, 0)))
+
+    def test_late_night_hour_24_is_off(self):
+        cfg = self._cfg(late_night_hour=24)
+        self.assertFalse(cfg.is_late_night(dt.datetime(2026, 7, 2, 23, 0)))
+        self.assertFalse(cfg.is_late_night(dt.datetime(2026, 7, 2, 2, 0)))
+
+    def test_is_late_night_non_wrapping(self):
+        cfg = self._cfg(late_night_hour=1, day_reset_hour=4)  # 01:00..04:00
+        self.assertTrue(cfg.is_late_night(dt.datetime(2026, 7, 2, 2, 0)))
+        self.assertFalse(cfg.is_late_night(dt.datetime(2026, 7, 2, 0, 30)))
+        self.assertFalse(cfg.is_late_night(dt.datetime(2026, 7, 2, 5, 0)))
 
     # ───────── removing warnings is weakening ─────────
     def test_removing_a_warning_is_weakening(self):

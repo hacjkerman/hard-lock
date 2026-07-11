@@ -390,6 +390,16 @@ class ConfigTestCase(unittest.TestCase):
         self.assertNotIn("cutoff_sat", cfg._data["pending_changes"])
         self.assertEqual(cfg._data["cutoff_sat"], "23:30")
 
+    def test_activate_pending_applies_now_and_clears_queue(self):
+        cfg = self._cfg(edit_cooldown_hours=24)
+        cfg._data["cutoff_sat"] = "23:30"
+        cfg.apply_settings({"cutoff_sat": "01:30"})  # queued
+        self.assertIn("cutoff_sat", cfg._data["pending_changes"])
+        self.assertTrue(cfg.activate_pending("cutoff_sat"))
+        self.assertEqual(cfg._data["cutoff_sat"], "01:30")  # now in force
+        self.assertNotIn("cutoff_sat", cfg._data["pending_changes"])
+        self.assertFalse(cfg.activate_pending("cutoff_sat"))  # nothing queued now
+
     def test_setup_fans_baseline_out_to_all_days(self):
         cfg = Config.load(self.path)
         cfg.complete_setup({"daily_cap_minutes": 360, "hard_cutoff_time": "22:00"})

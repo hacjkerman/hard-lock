@@ -340,6 +340,13 @@ class Api:
             self._log("pending_cancelled", key=key)
         return {"ok": ok, "pending": self._pending_view()}
 
+    def activate_pending(self, key: str) -> dict:
+        """Manual override: apply a queued change now instead of after cooldown."""
+        ok = self.config.activate_pending(key)
+        if ok:
+            self._log("pending_activated", key=key)
+        return {"ok": ok, "pending": self._pending_view()}
+
     def open_settings(self) -> None:
         self._open_settings()
 
@@ -536,6 +543,9 @@ class Api:
         elif t == "pending_cancelled":
             label = f"Cancelled queued {e.get('key', '')}"
             tone = "neutral"
+        elif t == "pending_activated":
+            label = f"Activated queued {e.get('key', '')} (skipped cooldown)"
+            tone = "amber"
         elif t == "session_timer":
             label = f"Late-night timer · {e.get('minutes')} min"
             tone = "neutral"

@@ -402,6 +402,19 @@ class Config:
             self.save()
         return True
 
+    def activate_pending(self, key: str) -> bool:
+        """Promote a queued change to effective immediately (manual override of
+        the cooldown). Returns False if nothing is queued for that key."""
+        with self._lock:
+            pending = dict(self._data.get("pending_changes") or {})
+            entry = pending.pop(key, None)
+            if entry is None:
+                return False
+            self._data[key] = entry["value"]
+            self._data["pending_changes"] = pending
+            self.save()
+        return True
+
     # Traffic-light thresholds — single source of truth. Based on time
     # remaining (min of cap-remaining and cutoff-remaining) in seconds.
     STATE_RED_SECONDS = 15 * 60

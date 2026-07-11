@@ -302,9 +302,13 @@ h1 {
   margin-top: 6px;
   font-variant-numeric: tabular-nums;
 }
-.pending-cancel {
+.pending-actions {
+  display: flex;
+  gap: 6px;
   margin-top: 8px;
-  width: 100%;
+}
+.pending-actions .btn {
+  flex: 1;
 }
 
 /* Also constrain the row so long content doesn't push horizontal scroll. */

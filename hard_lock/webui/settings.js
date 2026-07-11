@@ -1,6 +1,7 @@
 function $(id) { return document.getElementById(id); }
 
 let dayKeys = [];  // ["mon", … "sun"], from get_settings
+const armedActivate = new Set();  // pending keys one click into "Activate now"
 const DAY_LABEL = { mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu", fri: "Fri", sat: "Sat", sun: "Sun" };
 
 function fieldLabel(key) {
@@ -39,12 +40,36 @@ function renderPending(pending) {
         <span>activates ${escapeHtml(p.effective_at_human)}</span>
         <span>in ${escapeHtml(p.remaining_hm)}</span>
       </div>
-      <button class="btn sm danger pending-cancel">Cancel</button>
+      <div class="pending-actions">
+        <button class="btn sm pending-activate">Activate now</button>
+        <button class="btn sm danger pending-cancel">Cancel</button>
+      </div>
     `;
     el.querySelector(".pending-field").textContent = fieldLabel(p.key);
     el.querySelector(".new").textContent = fmtValue(p.key, p.value);
     el.querySelector(".pending-cancel").addEventListener("click", async () => {
       await window.pywebview.api.cancel_pending(p.key);
+      await reload();
+    });
+
+    // Manual override: first click arms, second click applies now (skips the
+    // cooldown). Armed state lives in armedActivate so the 2s poll re-render
+    // doesn't reset it mid-confirm.
+    const actBtn = el.querySelector(".pending-activate");
+    if (armedActivate.has(p.key)) {
+      actBtn.textContent = "Skip cooldown?";
+      actBtn.classList.add("danger");
+    }
+    actBtn.addEventListener("click", async () => {
+      if (!armedActivate.has(p.key)) {
+        armedActivate.add(p.key);
+        actBtn.textContent = "Skip cooldown?";
+        actBtn.classList.add("danger");
+        setTimeout(() => armedActivate.delete(p.key), 3000);
+        return;
+      }
+      armedActivate.delete(p.key);
+      await window.pywebview.api.activate_pending(p.key);
       await reload();
     });
     list.appendChild(el);

@@ -289,7 +289,9 @@ def main(argv: "list[str] | None" = None) -> int:
             frameless=True,
             on_top=True,
             resizable=False,
-            easy_drag=True,
+            # Drag only by the titlebar (.pywebview-drag-region in session.html);
+            # full-window easy_drag would hijack the slider and the buttons.
+            easy_drag=False,
         )
         prompt_window_ref[0] = win
         _attach_prompt_guard(win)

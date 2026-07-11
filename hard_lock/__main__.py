@@ -342,7 +342,9 @@ def main(argv: "list[str] | None" = None) -> int:
     )
 
     # First launch → onboarding wizard. Else after the late-night hour → the
-    # session-timer prompt. Otherwise straight to the HUD. Each front window
+    # (bounded) session-timer prompt — but only if there's actually time left to
+    # commit; past the cutoff/cap it would be a dead "nothing to set" screen, so
+    # skip straight to the HUD. Otherwise straight to the HUD. Each front window
     # hands off to the HUD (open_hud destroys it) and hides-to-tray on close.
     if not config.setup_completed:
         win = webview.create_window(
@@ -356,7 +358,7 @@ def main(argv: "list[str] | None" = None) -> int:
         )
         prompt_window_ref[0] = win
         _attach_prompt_guard(win)
-    elif config.is_late_night():
+    elif config.is_late_night() and api.get_session_prompt_info()["max_minutes"] >= 5:
         open_session_prompt()
     else:
         open_hud()

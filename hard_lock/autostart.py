@@ -35,10 +35,13 @@ def launch_command() -> str:
 
 
 def _schtasks(*args: str) -> subprocess.CompletedProcess:
+    # CREATE_NO_WINDOW so spawning schtasks from the windowed app doesn't flash a
+    # console window on screen.
     return subprocess.run(
         ["schtasks", *args],
         capture_output=True,
         text=True,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
 
 

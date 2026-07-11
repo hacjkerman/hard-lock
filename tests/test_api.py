@@ -190,11 +190,13 @@ class ApiStatusTestCase(unittest.TestCase):
         s = api.get_settings()
         self.assertEqual(s["late_night_hour"], 22)
 
-    def test_get_settings_includes_autostart(self):
+    def test_get_autostart_status(self):
         from unittest import mock
         api, _, _ = make()
         with mock.patch("hard_lock.autostart.is_installed", return_value=True):
-            self.assertTrue(api.get_settings()["autostart_installed"])
+            self.assertTrue(api.get_autostart_status()["installed"])
+        with mock.patch("hard_lock.autostart.is_installed", return_value=False):
+            self.assertFalse(api.get_autostart_status()["installed"])
 
     def test_set_autostart_enable_triggers_elevated_install(self):
         from unittest import mock

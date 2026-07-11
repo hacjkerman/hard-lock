@@ -226,7 +226,6 @@ class Api:
             "late_night_hour": self.config.late_night_hour,
             "day_reset_hour": self.config.day_reset_hour,
             "dry_run": self.config.dry_run,
-            "autostart_installed": self._autostart_installed(),
             "pending": self._pending_view(),
         }
 

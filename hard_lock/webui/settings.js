@@ -59,7 +59,6 @@ function applyFormValues(settings) {
   $("dry-state").textContent = settings.dry_run ? "ON" : "OFF";
   $("dry-state").classList.toggle("tone-amber", !!settings.dry_run);
   $("dry-state").classList.toggle("tone-green", !settings.dry_run);
-  if (!autostartBusy) setAutostartToggle(!!settings.autostart_installed);
 }
 
 let autostartBusy = false;
@@ -128,6 +127,14 @@ async function reload() {
   $("today-usage").textContent = `${status.used_hm} / ${status.cap_hm}`;
   $("armed-label").textContent = status.dry_run ? "Dry-run" : "Lock armed";
   $("armed-dot").style.color = status.dry_run ? "var(--amber)" : "var(--green)";
+  // Autostart state is queried separately (schtasks), so it's not part of the
+  // frequent get_settings poll.
+  if (!autostartBusy) {
+    window.pywebview.api
+      .get_autostart_status()
+      .then((s) => setAutostartToggle(!!s.installed))
+      .catch(() => {});
+  }
 }
 
 function setStatus(msg, cls) {

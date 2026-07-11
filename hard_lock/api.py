@@ -46,8 +46,14 @@ class Api:
         self._on_game_change = on_game_change
         self._event_log = event_log
         self._day_history = day_history
-        # Wall-clock deadline for the late-night session timer, or None.
+        # Wall-clock deadline for the session timer, or None. A manual (on-demand)
+        # close overrides cap/cutoff; the automatic late-night prompt stays
+        # bounded (can only shorten). _manual_prompt marks that the NEXT prompt
+        # was opened on demand; _session_override marks the active timer as
+        # authoritative (it decides the shutdown time on its own).
         self._session_deadline = session_deadline
+        self._manual_prompt = False
+        self._session_override = False
         # Detects whether a "don't shut down mid-game" process is running.
         self._league_active = league_active
         self._league_last_active: "float | None" = None
@@ -119,8 +125,13 @@ class Api:
         floor = cap_remaining
         if cutoff_remaining is not None:
             floor = min(floor, cutoff_remaining)
+        # A manual close overrides cap/cutoff, so it isn't bounded by the floor —
+        # offer a full range. The bounded late-night prompt caps at the floor.
+        manual = self._manual_prompt
+        max_minutes = 480 if manual else max(1, int(floor // 60))
         return {
-            "max_minutes": max(1, int(floor // 60)),
+            "manual": manual,
+            "max_minutes": max_minutes,
             "hard_cutoff_time": self.config.hard_cutoff_time,
             "cutoff_remaining_hm": _fmt_hm(cutoff_remaining) if cutoff_remaining is not None else None,
             "late_night_hour": self.config.late_night_hour,
@@ -128,21 +139,26 @@ class Api:
             "is_late_night": self.config.is_late_night(),
         }
 
-    def start_session_timer(self, minutes) -> dict:
-        """Commit to a work window (minutes) and hand off to the HUD."""
+    def start_session_timer(self, minutes, override=False) -> dict:
+        """Commit to a work window (minutes) and hand off to the HUD. override=True
+        (a manual close) makes the timer authoritative — it decides the shutdown
+        time even past the cap/cutoff."""
         try:
             m = int(minutes)
         except (TypeError, ValueError):
             m = 0
         if m > 0:
             self._session_deadline = dt.datetime.now() + dt.timedelta(minutes=m)
-            self._log("session_timer", minutes=m)
+            self._session_override = bool(override)
+            self._log("session_timer", minutes=m, override=bool(override))
+        self._manual_prompt = False
         if self._open_hud:
             self._open_hud()
         return {"ok": True}
 
     def skip_session_timer(self) -> dict:
         """Dismiss the prompt with no extra limit; normal cap/cutoff still apply."""
+        self._manual_prompt = False
         if self._open_hud:
             self._open_hud()
         return {"ok": True}
@@ -157,13 +173,20 @@ class Api:
 
     @staticmethod
     def _effective_from(cap_remaining, cutoff_remaining, session_remaining) -> float:
-        # Tightest of every active limit. The session timer only ever shortens
-        # this — it never extends past cap/cutoff.
+        # Tightest of every active limit. A bounded session timer only ever
+        # shortens this — it never extends past cap/cutoff.
         effective = cap_remaining
         for limit in (cutoff_remaining, session_remaining):
             if limit is not None:
                 effective = min(effective, limit)
         return effective
+
+    def _effective(self, cap_remaining, cutoff_remaining, session_remaining) -> float:
+        # A manual close timer is authoritative: the user deliberately chose when
+        # the machine shuts down, so it overrides cap/cutoff (even to extend).
+        if self._session_override and session_remaining is not None:
+            return session_remaining
+        return self._effective_from(cap_remaining, cutoff_remaining, session_remaining)
 
     def _track_league(self) -> None:
         """Note when a defer-for game was last seen running (throttled). Keeps
@@ -210,7 +233,7 @@ class Api:
             self._track_league()
 
             cap_remaining, cutoff_remaining, session_remaining = self._limits()
-            effective = self._effective_from(cap_remaining, cutoff_remaining, session_remaining)
+            effective = self._effective(cap_remaining, cutoff_remaining, session_remaining)
             deferred = self._deferred_for_game()
             # Tell the app when a game starts/stops holding (→ auto-hide the HUD).
             if deferred != self._game_defer_prev:
@@ -272,7 +295,7 @@ class Api:
     # ───────── read-only snapshot for the HUD / settings / tray ─────────
     def get_status(self) -> dict:
         cap_remaining, cutoff_remaining, session_remaining = self._limits()
-        effective = self._effective_from(cap_remaining, cutoff_remaining, session_remaining)
+        effective = self._effective(cap_remaining, cutoff_remaining, session_remaining)
         used_seconds = self.state.used_seconds
         cap_seconds = self.config.daily_cap_seconds
         used_pct = 0 if cap_seconds == 0 else min(100, 100 * used_seconds / cap_seconds)
@@ -386,7 +409,10 @@ class Api:
 
     def open_session_prompt(self) -> None:
         """Open the 'set a work timer' prompt on demand (any time, not just at
-        the late-night launch)."""
+        the late-night launch). On-demand = a manual close that overrides the
+        cap/cutoff; the automatic late-night prompt (opened at launch, not via
+        this method) stays bounded."""
+        self._manual_prompt = True
         if self._open_session_prompt:
             self._open_session_prompt()
 

@@ -69,6 +69,38 @@ class ApiStatusTestCase(unittest.TestCase):
         self.assertFalse(s["session_active"])
         self.assertIsNone(s["session_remaining_hm"])
 
+    def test_manual_close_overrides_cutoff(self):
+        # An on-demand manual close is authoritative — it overrides a nearer
+        # cutoff (can even extend past it).
+        api, config, _ = make({"daily_cap_minutes": 480, "hard_cutoff_time": "23:59"})
+        config.cutoff_remaining_seconds = lambda now=None: 60.0  # cutoff in 1 min
+        api.open_session_prompt()  # marks the prompt manual
+        api.start_session_timer(30, override=True)  # 30-min manual close
+        s = api.get_status()
+        self.assertTrue(s["session_active"])
+        self.assertGreater(s["remaining_seconds"], 29 * 60)  # ~30 min, not 1 min
+
+    def test_bounded_timer_still_only_shortens(self):
+        # The automatic (non-manual) timer must NOT override the cutoff.
+        api, config, _ = make({"daily_cap_minutes": 480, "hard_cutoff_time": "23:59"})
+        config.cutoff_remaining_seconds = lambda now=None: 60.0
+        api.start_session_timer(30, override=False)  # bounded
+        s = api.get_status()
+        self.assertLessEqual(s["remaining_seconds"], 61)  # cutoff (1 min) still wins
+
+    def test_on_demand_prompt_is_manual_with_full_range(self):
+        api, _, _ = make({"daily_cap_minutes": 480, "hard_cutoff_time": "23:59"})
+        api.open_session_prompt()
+        info = api.get_session_prompt_info()
+        self.assertTrue(info["manual"])
+        self.assertEqual(info["max_minutes"], 480)
+
+    def test_launch_prompt_is_bounded_not_manual(self):
+        api, _, _ = make({"daily_cap_minutes": 480, "hard_cutoff_time": "23:59"})
+        info = api.get_session_prompt_info()  # no on-demand open → late-night bounded
+        self.assertFalse(info["manual"])
+        self.assertLessEqual(info["max_minutes"], 480)
+
     def test_bar_tracks_cap_when_cap_is_binding(self):
         # No cutoff / timer → cap is the only limit; a fresh day ≈ full bar.
         api, _, _ = make({"daily_cap_minutes": 480, "hard_cutoff_time": None})

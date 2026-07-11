@@ -3,6 +3,7 @@ const PRESETS = [15, 30, 45, 60];
 let maxMinutes = 120;
 let minMinutes = 5;
 let minutes = 30;
+let manualOverride = false;  // on-demand "manual close" that overrides cap/cutoff
 
 function $(id) { return document.getElementById(id); }
 
@@ -53,34 +54,38 @@ function renderPresets() {
 async function init() {
   try {
     const info = await window.pywebview.api.get_session_prompt_info();
+    manualOverride = !!info.manual;
     maxMinutes = Math.max(1, info.max_minutes);
     minMinutes = Math.min(5, maxMinutes);
 
-    if (info.is_late_night) {
+    const grace = Number.isFinite(info.grace_seconds) ? `${info.grace_seconds}-second` : "60-second";
+    $("grace-note").textContent = grace;
+
+    if (manualOverride) {
+      // On-demand: a manual close the user fully controls (overrides cutoff).
+      $("eyebrow").textContent = "Manual close";
+      $("prompt-title").textContent = "Shut down in…";
+      const chip = $("prompt-chip");
+      if (chip) chip.textContent = "Manual";
+      $("subtitle").textContent =
+        `Pick how long until this machine shuts down. When the timer runs out it ` +
+        `closes — with a ${grace} grace, no cancel. This is a manual close, so it ` +
+        `overrides your hard cutoff.`;
+      $("floor-text").textContent = "Manual close — overrides your cutoff; the machine shuts down when it runs out.";
+    } else if (info.is_late_night) {
       const hh = String(info.late_night_hour).padStart(2, "0");
       $("eyebrow").textContent = `It's after ${hh}:00`;
-    } else {
-      // Opened on demand (not late night) — reword for a plain manual timer.
-      $("eyebrow").textContent = "Manual work timer";
-      $("prompt-title").textContent = "How long do you want to work?";
-      const chip = $("prompt-chip");
-      if (chip) { chip.textContent = "Timer"; }
-    }
-    if (Number.isFinite(info.grace_seconds)) {
-      $("grace-note").textContent = `${info.grace_seconds}-second`;
-    }
-    if (info.hard_cutoff_time && info.cutoff_remaining_hm) {
-      $("floor-text").textContent =
-        `Shuts down by ${info.hard_cutoff_time} at the latest · ${info.cutoff_remaining_hm} left before then.`;
-    } else {
-      $("floor-text").textContent = `At most ${fmtLabel(maxMinutes)} before your daily cap.`;
-    }
-
-    // Too little time to set a meaningful timer (at/near/past a limit). A slider
-    // pinned to 1 min with every preset disabled just looks broken — say why.
-    if (maxMinutes < 5) {
-      showNoTimeState(info);
-      return;
+      if (info.hard_cutoff_time && info.cutoff_remaining_hm) {
+        $("floor-text").textContent =
+          `Shuts down by ${info.hard_cutoff_time} at the latest · ${info.cutoff_remaining_hm} left before then.`;
+      } else {
+        $("floor-text").textContent = `At most ${fmtLabel(maxMinutes)} before your daily cap.`;
+      }
+      // Bounded prompt with no time left just looks broken — explain instead.
+      if (maxMinutes < 5) {
+        showNoTimeState(info);
+        return;
+      }
     }
   } catch (err) {
     console.error("prompt info failed", err);
@@ -119,7 +124,7 @@ function wire() {
 
   $("start").addEventListener("click", async () => {
     disable();
-    await window.pywebview.api.start_session_timer(minutes);
+    await window.pywebview.api.start_session_timer(minutes, manualOverride);
   });
   $("skip").addEventListener("click", async () => {
     disable();

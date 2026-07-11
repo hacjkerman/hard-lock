@@ -43,8 +43,10 @@ class Api:
         self._open_session_prompt = open_session_prompt
         self._event_log = event_log
         self._day_history = day_history
-        # Wall-clock deadline for the late-night session timer, or None.
+        # Wall-clock deadline for the late-night session timer, or None, plus
+        # its original length (so the HUD bar can show it as a fraction).
         self._session_deadline = session_deadline
+        self._session_total_seconds: "float | None" = None
         # Detects whether a "don't shut down mid-game" process is running.
         self._league_active = league_active
         self._league_last_active: "float | None" = None
@@ -130,6 +132,7 @@ class Api:
             m = 0
         if m > 0:
             self._session_deadline = dt.datetime.now() + dt.timedelta(minutes=m)
+            self._session_total_seconds = m * 60
             self._log("session_timer", minutes=m)
         if self._open_hud:
             self._open_hud()
@@ -220,6 +223,28 @@ class Api:
             else:
                 self._shutdown_held = False
 
+    def _bar_metrics(self, cap_remaining, cutoff_remaining, session_remaining,
+                     used_seconds, cap_seconds) -> dict:
+        """The HUD bar tracks the *binding* limit (nearest of cap / cutoff /
+        timer) so it depletes in step with the big countdown — each expressed
+        as a fraction of that limit's own full window."""
+        limits = [("cap", cap_remaining, cap_seconds)]
+        window = self.config.cutoff_window_seconds()
+        if cutoff_remaining is not None and window:
+            limits.append(("cutoff", cutoff_remaining, window))
+        if session_remaining is not None:
+            total = self._session_total_seconds or session_remaining or 1
+            limits.append(("session", session_remaining, total))
+        name, remaining, total = min(limits, key=lambda pair: pair[1])
+        pct = 100.0 if total <= 0 else max(0.0, min(100.0, 100.0 * remaining / total))
+        if name == "cutoff":
+            label = f"{_fmt_hm(used_seconds)} used · cutoff {self.config.hard_cutoff_time}"
+        elif name == "session":
+            label = f"{_fmt_hm(used_seconds)} used · work timer"
+        else:
+            label = f"{_fmt_hm(used_seconds)} of {_fmt_hm(cap_seconds)} cap used"
+        return {"remaining_pct": round(pct, 1), "binding": name, "limit_label": label}
+
     # ───────── read-only snapshot for the HUD / settings / tray ─────────
     def get_status(self) -> dict:
         cap_remaining, cutoff_remaining, session_remaining = self._limits()
@@ -227,11 +252,16 @@ class Api:
         used_seconds = self.state.used_seconds
         cap_seconds = self.config.daily_cap_seconds
         used_pct = 0 if cap_seconds == 0 else min(100, 100 * used_seconds / cap_seconds)
+        bar = self._bar_metrics(cap_remaining, cutoff_remaining, session_remaining,
+                                used_seconds, cap_seconds)
 
         return {
             "remaining_seconds": effective,
             "remaining_clock": _fmt_clock(effective),
             "remaining_hm": _fmt_hm(effective),
+            "remaining_pct": bar["remaining_pct"],
+            "binding": bar["binding"],
+            "limit_label": bar["limit_label"],
             "cap_remaining_seconds": cap_remaining,
             "cutoff_remaining_seconds": cutoff_remaining,
             "cutoff_remaining_hm": _fmt_hm(cutoff_remaining) if cutoff_remaining is not None else None,

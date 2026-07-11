@@ -69,6 +69,41 @@ class ApiStatusTestCase(unittest.TestCase):
         self.assertFalse(s["session_active"])
         self.assertIsNone(s["session_remaining_hm"])
 
+    def test_bar_tracks_cap_when_cap_is_binding(self):
+        # No cutoff / timer → cap is the only limit; a fresh day ≈ full bar.
+        api, _, _ = make({"daily_cap_minutes": 480, "hard_cutoff_time": None})
+        s = api.get_status()
+        self.assertEqual(s["binding"], "cap")
+        self.assertAlmostEqual(s["remaining_pct"], 100.0, delta=0.5)
+        self.assertIn("cap used", s["limit_label"])
+
+    def test_bar_depletes_as_cap_is_used(self):
+        api, _, _ = make({"daily_cap_minutes": 480, "hard_cutoff_time": None},
+                         used_seconds=240 * 60)
+        s = api.get_status()
+        self.assertEqual(s["binding"], "cap")
+        self.assertAlmostEqual(s["remaining_pct"], 50.0, delta=0.5)
+
+    def test_bar_tracks_cutoff_when_cutoff_is_binding(self):
+        # Huge cap so the wall-clock cutoff is always the nearest limit.
+        api, config, _ = make({"daily_cap_minutes": 1440, "hard_cutoff_time": "23:59"})
+        s = api.get_status()
+        self.assertEqual(s["binding"], "cutoff")
+        self.assertGreaterEqual(s["remaining_pct"], 0.0)
+        self.assertLessEqual(s["remaining_pct"], 100.0)
+        self.assertIn("cutoff 23:59", s["limit_label"])
+        expected = 100 * config.cutoff_remaining_seconds() / config.cutoff_window_seconds()
+        self.assertAlmostEqual(s["remaining_pct"], round(expected, 1), delta=0.5)
+
+    def test_bar_tracks_timer_when_timer_is_binding(self):
+        api, _, _ = make({"daily_cap_minutes": 480, "hard_cutoff_time": None})
+        api.start_session_timer(30)
+        s = api.get_status()
+        self.assertEqual(s["binding"], "session")
+        # Fresh 30-min timer ≈ full bar relative to its own length.
+        self.assertAlmostEqual(s["remaining_pct"], 100.0, delta=1.0)
+        self.assertIn("work timer", s["limit_label"])
+
     def test_start_session_opens_hud_and_sets_deadline(self):
         opened = []
         api, _, _ = make(open_hud=lambda: opened.append(1))

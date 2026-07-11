@@ -16,10 +16,11 @@ function render(status) {
   chip.classList.add(s);
   $("state-label").textContent = STATE_LABEL[s] || "";
 
-  $("sub-usage").textContent = `of ${status.cap_hm} daily cap · ${status.used_hm} used`;
+  $("sub-usage").textContent = status.limit_label;
 
   const fill = $("progress-fill");
-  fill.style.width = `${status.used_pct}%`;
+  // Depletes with the countdown: full = lots of time, empty = shutdown near.
+  fill.style.width = `${status.remaining_pct}%`;
   const bar = $("progress");
   bar.classList.remove("green", "amber", "red");
   bar.classList.add(s);

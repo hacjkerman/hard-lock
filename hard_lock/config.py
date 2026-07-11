@@ -268,6 +268,18 @@ class Config:
             return 0.0
         return (cutoff - now).total_seconds()
 
+    def cutoff_window_seconds(self):
+        """Length of the pre-cutoff window within a logical day (day reset →
+        cutoff), used to express cutoff-remaining as a fraction of the day."""
+        t = self._data.get("hard_cutoff_time")
+        if not t:
+            return None
+        h, m = map(int, t.split(":"))
+        cutoff_min = h * 60 + m
+        reset_min = (self.day_reset_hour % 24) * 60
+        span = (cutoff_min - reset_min) % (24 * 60)
+        return (span or 24 * 60) * 60
+
     def pending_summary(self) -> str:
         pending = self._data.get("pending_changes") or {}
         if not pending:

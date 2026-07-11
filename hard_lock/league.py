@@ -52,8 +52,12 @@ def running_process_names() -> "set[str]":
 
 
 def is_game_active(process_names=None) -> bool:
-    """True if any of the given game process names is currently running."""
-    names = [n.lower() for n in (process_names or DEFAULT_GAMES) if n]
+    """True if any of the given game process names is currently running. An
+    explicit empty list means "no games configured" → always False (the feature
+    is off); only None falls back to DEFAULT_GAMES."""
+    if process_names is None:
+        process_names = DEFAULT_GAMES
+    names = [n.lower() for n in process_names if n]
     if not names:
         return False
     try:

@@ -205,10 +205,15 @@ class Api:
 
             cap_remaining, cutoff_remaining, session_remaining = self._limits()
             effective = self._effective_from(cap_remaining, cutoff_remaining, session_remaining)
-            self._maybe_fire_warnings(effective)
+            deferred = self._deferred_for_game()
+            # While a game holds the shutdown, a "N minutes left" warning would be
+            # a lie (nothing is going to shut down) AND could pop over the game —
+            # so fire warnings only when the shutdown is actually imminent.
+            if not deferred:
+                self._maybe_fire_warnings(effective)
             if effective <= self.config.grace_seconds:
                 # Don't cut off a game in progress — hold until it ends + buffer.
-                if self._deferred_for_game():
+                if deferred:
                     if not self._shutdown_held:
                         self._shutdown_held = True
                         self._log("shutdown_held", reason="game")

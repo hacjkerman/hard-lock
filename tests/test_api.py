@@ -188,6 +188,25 @@ class ApiStatusTestCase(unittest.TestCase):
         self.assertEqual(graced, [])  # NOT shut down — game in progress
         self.assertTrue(api.get_status()["shutdown_held"])
 
+    def test_warnings_suppressed_while_game_active(self):
+        # A held game must not fire (false, and intrusive) warnings.
+        api, _, _ = make(
+            {"daily_cap_minutes": 480, "hard_cutoff_time": None, "warning_minutes_before": [10]},
+            used_seconds=(480 - 9) * 60,  # ~9 min left → inside the 10-min warning
+            league_active=lambda games: True,
+        )
+        api.tick()
+        self.assertEqual(api.get_status()["recent_warnings"], [])
+
+    def test_warnings_fire_without_game(self):
+        api, _, _ = make(
+            {"daily_cap_minutes": 480, "hard_cutoff_time": None, "warning_minutes_before": [10]},
+            used_seconds=(480 - 9) * 60,
+            league_active=lambda games: False,
+        )
+        api.tick()
+        self.assertIn(10, api.get_status()["recent_warnings"])
+
     def test_shutdown_held_within_buffer_after_game(self):
         graced = []
         api, _, _ = make(

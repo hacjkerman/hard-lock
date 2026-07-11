@@ -73,7 +73,12 @@ function wire() {
   $("open-history").addEventListener("click", () => {
     window.pywebview.api.open_history();
   });
-  $("hud-hide").addEventListener("click", () => {
+  const hide = $("hud-hide");
+  // The hide button sits inside the titlebar drag region; stop its mousedown
+  // from reaching pywebview's body-level drag listener so a click doesn't
+  // start a window drag.
+  hide.addEventListener("mousedown", (e) => e.stopPropagation());
+  hide.addEventListener("click", () => {
     window.pywebview.api.hide_hud();
   });
   $("open-timer").addEventListener("click", () => {

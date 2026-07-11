@@ -139,7 +139,9 @@ def main(argv: "list[str] | None" = None) -> int:
             frameless=True,
             on_top=True,
             resizable=False,
-            easy_drag=True,
+            # Drag only by the titlebar (.pywebview-drag-region in hud.html);
+            # full-window easy_drag would hijack the scrollbar and body clicks.
+            easy_drag=False,
         )
         hud_window_ref[0] = win
 

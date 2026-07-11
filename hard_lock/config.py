@@ -371,7 +371,14 @@ class Config:
 
             for key, value in new.items():
                 old = self._data.get(key)
-                if value == old and key not in pending:
+                pend = pending.get(key)
+                # Already the effective value with nothing queued → nothing to do.
+                if value == old and pend is None:
+                    continue
+                # Already queued to exactly this value → leave the running timer
+                # alone. Re-submitting the whole form (which shows queued values)
+                # must be idempotent — not re-defer or, worse, cancel the change.
+                if pend is not None and pend.get("value") == value:
                     continue
                 if self._weakens(key, old, value):
                     pending[key] = {"value": value, "effective_at": effective_at}

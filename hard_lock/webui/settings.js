@@ -59,6 +59,11 @@ function escapeHtml(s) {
 
 function buildPerDay(settings) {
   dayKeys = settings.day_keys || [];
+  // A queued (deferred) edit isn't in force yet, but show it in the grid — with
+  // an amber "queued" mark — so the change stays visible and re-applying is a
+  // no-op instead of silently reverting to the current value.
+  const pend = {};
+  for (const p of settings.pending || []) pend[p.key] = p.value;
   const body = $("perday-body");
   body.innerHTML = "";
   dayKeys.forEach((k, i) => {
@@ -71,9 +76,18 @@ function buildPerDay(settings) {
     `;
     tr.querySelector(".perday-day").textContent = settings.day_labels[i];
     body.appendChild(tr);
-    $(`cap_${k}`).value = settings.cap_by_day[i];
-    $(`cutoff_${k}`).value = settings.cutoff_by_day[i] || "";
+    const capK = `cap_${k}`, cutK = `cutoff_${k}`;
+    const capQ = capK in pend, cutQ = cutK in pend;
+    $(capK).value = capQ ? pend[capK] : settings.cap_by_day[i];
+    $(cutK).value = (cutQ ? pend[cutK] : settings.cutoff_by_day[i]) || "";
+    if (capQ) markQueued($(capK));
+    if (cutQ) markQueued($(cutK));
   });
+}
+
+function markQueued(input) {
+  input.classList.add("queued");
+  input.title = "Queued — activates after your cooldown (see Pending changes).";
 }
 
 function applyFormValues(settings) {
@@ -222,8 +236,8 @@ function wire() {
     try {
       const res = await window.pywebview.api.apply_settings(form);
       const parts = [];
-      if (res.applied.length) parts.push(`${res.applied.length} applied`);
-      if (res.deferred.length) parts.push(`${res.deferred.length} deferred`);
+      if (res.applied.length) parts.push(`${res.applied.length} applied now`);
+      if (res.deferred.length) parts.push(`${res.deferred.length} queued (activates after cooldown — see Pending changes)`);
       setStatus(parts.join(" · ") || "No changes.", res.deferred.length ? "warn" : "ok");
       renderPending(res.pending);
       await reload();

@@ -365,6 +365,31 @@ class ConfigTestCase(unittest.TestCase):
         self.assertFalse(deferred)
         self.assertEqual(cfg._data["cutoff_sat"], "22:00")
 
+    def test_reapplying_a_queued_value_is_idempotent(self):
+        # Re-submitting the form (which shows queued values) must not cancel the
+        # pending change or reset its timer — the bug that wiped a weekend cutoff.
+        cfg = self._cfg(edit_cooldown_hours=24)
+        cfg._data["cutoff_sat"] = "23:30"
+        _, deferred = cfg.apply_settings({"cutoff_sat": "01:30"})
+        self.assertTrue(deferred)
+        eff_at = cfg._data["pending_changes"]["cutoff_sat"]["effective_at"]
+        # Apply the same queued value again → no-op, timer untouched.
+        applied2, deferred2 = cfg.apply_settings({"cutoff_sat": "01:30"})
+        self.assertEqual(applied2, [])
+        self.assertEqual(deferred2, [])
+        self.assertIn("cutoff_sat", cfg._data["pending_changes"])
+        self.assertEqual(cfg._data["pending_changes"]["cutoff_sat"]["effective_at"], eff_at)
+
+    def test_reapplying_current_value_still_cancels_a_pending_change(self):
+        # Deliberately setting the field back to the in-force value cancels the
+        # queued change (an explicit revert).
+        cfg = self._cfg(edit_cooldown_hours=24)
+        cfg._data["cutoff_sat"] = "23:30"
+        cfg.apply_settings({"cutoff_sat": "01:30"})
+        cfg.apply_settings({"cutoff_sat": "23:30"})
+        self.assertNotIn("cutoff_sat", cfg._data["pending_changes"])
+        self.assertEqual(cfg._data["cutoff_sat"], "23:30")
+
     def test_setup_fans_baseline_out_to_all_days(self):
         cfg = Config.load(self.path)
         cfg.complete_setup({"daily_cap_minutes": 360, "hard_cutoff_time": "22:00"})

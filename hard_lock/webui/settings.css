@@ -175,6 +175,10 @@ h1 {
 .perday .field { width: 100%; }
 .perday .perday-cap { max-width: 88px; }
 .perday .perday-cutoff { max-width: 120px; }
+.perday .field.queued {
+  border-color: var(--amber);
+  box-shadow: inset 0 0 0 1px var(--amber);
+}
 
 .anti-cheat-note {
   margin-top: 20px;

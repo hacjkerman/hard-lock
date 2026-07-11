@@ -7,7 +7,7 @@ function render(status) {
   const s = status.state;
 
   const time = $("remaining");
-  time.textContent = status.remaining_hm;
+  time.textContent = status.remaining_clock;  // H:MM:SS — ticks every second
   time.classList.remove("green", "amber", "red");
   time.classList.add(s);
 

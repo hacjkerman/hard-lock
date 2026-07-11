@@ -207,9 +207,9 @@ def main(argv: "list[str] | None" = None) -> int:
             "Hard Lock — Settings",
             url=str(WEBUI_DIR / "settings.html"),
             js_api=api,
-            width=900,
-            height=620,
-            min_size=(760, 520),
+            width=1040,
+            height=640,
+            min_size=(880, 540),
         )
         _track_window(settings_window_ref, win)
 

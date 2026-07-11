@@ -70,6 +70,44 @@ def uninstall() -> tuple[bool, str]:
     return False, f"Could not remove task: {err}"
 
 
+def _cli_target() -> "tuple[str, str]":
+    """(exe, param_prefix) to run this app's own CLI. Frozen → the exe; source →
+    pythonw running launch.py by full path."""
+    from . import paths
+
+    if paths.is_frozen():
+        return sys.executable, ""
+    interp = Path(sys.executable)
+    pyw = interp.with_name("pythonw.exe")
+    launcher = str(pyw if pyw.exists() else interp)
+    return launcher, f'"{paths.data_dir() / "launch.py"}"'
+
+
+def _run_cli_elevated(arg: str) -> bool:
+    """Re-launch this app's CLI (`arg`) with a UAC elevation prompt, since
+    creating/removing an ONLOGON task requires admin. Returns True if the
+    elevated process was launched (the user still has to approve UAC); the task
+    state should be re-queried afterwards via is_installed()."""
+    import ctypes
+
+    exe, prefix = _cli_target()
+    params = f"{prefix} {arg}".strip()
+    try:
+        # ShellExecuteW returns >32 on success (an HINSTANCE-like value).
+        rc = ctypes.windll.shell32.ShellExecuteW(None, "runas", exe, params, None, 1)
+        return int(rc) > 32
+    except Exception:
+        return False
+
+
+def install_elevated() -> bool:
+    return _run_cli_elevated("--install")
+
+
+def uninstall_elevated() -> bool:
+    return _run_cli_elevated("--uninstall")
+
+
 def is_installed() -> bool:
     return _schtasks("/query", "/tn", TASK_NAME).returncode == 0
 

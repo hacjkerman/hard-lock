@@ -59,6 +59,42 @@ function applyFormValues(settings) {
   $("dry-state").textContent = settings.dry_run ? "ON" : "OFF";
   $("dry-state").classList.toggle("tone-amber", !!settings.dry_run);
   $("dry-state").classList.toggle("tone-green", !settings.dry_run);
+  if (!autostartBusy) setAutostartToggle(!!settings.autostart_installed);
+}
+
+let autostartBusy = false;
+
+function setAutostartToggle(on) {
+  $("autostart").classList.toggle("on", on);
+  $("autostart-state").textContent = on ? "ON" : "OFF";
+  $("autostart-state").classList.toggle("tone-green", on);
+  $("autostart-state").classList.toggle("tone-amber", !on);
+}
+
+async function onAutostartToggle() {
+  if (autostartBusy) return;
+  autostartBusy = true;
+  const wantOn = !$("autostart").classList.contains("on");
+  $("autostart-hint").textContent = "Approve the Windows prompt…";
+  try {
+    await window.pywebview.api.set_autostart(wantOn);
+    // Installing/removing runs elevated (UAC) and is async — poll the real state.
+    let installed = !wantOn;
+    for (let i = 0; i < 6; i++) {
+      await new Promise((r) => setTimeout(r, 700));
+      installed = (await window.pywebview.api.get_autostart_status()).installed;
+      if (installed === wantOn) break;
+    }
+    setAutostartToggle(installed);
+    $("autostart-hint").textContent =
+      installed === wantOn
+        ? (wantOn ? "Enabled — Hard Lock will start at logon." : "Disabled.")
+        : "Not changed (prompt declined). You can run install-autostart.bat as admin.";
+  } catch (err) {
+    $("autostart-hint").textContent = "Failed: " + (err.message || err);
+  } finally {
+    autostartBusy = false;
+  }
 }
 
 function readFormValues() {
@@ -109,6 +145,8 @@ function wire() {
     $("dry-state").classList.toggle("tone-amber", on);
     $("dry-state").classList.toggle("tone-green", !on);
   });
+
+  $("autostart").addEventListener("click", onAutostartToggle);
 
   $("reload").addEventListener("click", reload);
 

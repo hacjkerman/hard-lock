@@ -57,6 +57,36 @@ class SchtasksTestCase(unittest.TestCase):
             self.assertFalse(autostart.is_installed())
 
 
+class ElevatedTestCase(unittest.TestCase):
+    def test_install_elevated_runs_install(self):
+        with mock.patch.object(autostart, "_run_cli_elevated", return_value=True) as r:
+            self.assertTrue(autostart.install_elevated())
+        r.assert_called_once_with("--install")
+
+    def test_uninstall_elevated_runs_uninstall(self):
+        with mock.patch.object(autostart, "_run_cli_elevated", return_value=True) as r:
+            autostart.uninstall_elevated()
+        r.assert_called_once_with("--uninstall")
+
+    def test_cli_target_frozen(self):
+        with mock.patch("hard_lock.paths.is_frozen", return_value=True), \
+             mock.patch.object(autostart, "sys") as sysmod:
+            sysmod.executable = r"C:\Apps\HardLock.exe"
+            exe, prefix = autostart._cli_target()
+        self.assertEqual(exe, r"C:\Apps\HardLock.exe")
+        self.assertEqual(prefix, "")
+
+    def test_run_cli_elevated_shellexecute_success_and_failure(self):
+        fake = mock.MagicMock()
+        with mock.patch.object(autostart, "_cli_target", return_value=("X.exe", "")):
+            fake.shell32.ShellExecuteW.return_value = 42  # > 32 = success
+            with mock.patch("ctypes.windll", fake):
+                self.assertTrue(autostart._run_cli_elevated("--install"))
+            fake.shell32.ShellExecuteW.return_value = 5  # <= 32 = failure
+            with mock.patch("ctypes.windll", fake):
+                self.assertFalse(autostart._run_cli_elevated("--install"))
+
+
 class CliTestCase(unittest.TestCase):
     def test_status_cli(self):
         from hard_lock.__main__ import _run_cli

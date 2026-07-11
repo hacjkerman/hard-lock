@@ -190,6 +190,35 @@ class ApiStatusTestCase(unittest.TestCase):
         s = api.get_settings()
         self.assertEqual(s["late_night_hour"], 22)
 
+    def test_get_settings_includes_autostart(self):
+        from unittest import mock
+        api, _, _ = make()
+        with mock.patch("hard_lock.autostart.is_installed", return_value=True):
+            self.assertTrue(api.get_settings()["autostart_installed"])
+
+    def test_set_autostart_enable_triggers_elevated_install(self):
+        from unittest import mock
+        api, _, _ = make()
+        with mock.patch("hard_lock.autostart.install_elevated", return_value=True) as inst, \
+             mock.patch("hard_lock.autostart.uninstall_elevated") as uninst, \
+             mock.patch("hard_lock.autostart.is_installed", return_value=True):
+            res = api.set_autostart(True)
+        inst.assert_called_once()
+        uninst.assert_not_called()
+        self.assertTrue(res["triggered"])
+        self.assertTrue(res["installed"])
+
+    def test_set_autostart_disable_triggers_elevated_uninstall(self):
+        from unittest import mock
+        api, _, _ = make()
+        with mock.patch("hard_lock.autostart.uninstall_elevated", return_value=True) as uninst, \
+             mock.patch("hard_lock.autostart.install_elevated") as inst, \
+             mock.patch("hard_lock.autostart.is_installed", return_value=False):
+            res = api.set_autostart(False)
+        uninst.assert_called_once()
+        inst.assert_not_called()
+        self.assertFalse(res["installed"])
+
     def test_apply_settings_late_night_hour_tightening(self):
         api, config, _ = make({"late_night_hour": 23})
         res = api.apply_settings({"late_night_hour": 21})  # earlier = tightening

@@ -186,6 +186,27 @@
           </div>
         </section>
 
+        <section class="section">
+          <div class="section-head">
+            <div class="section-title">Start at logon</div>
+            <div class="section-sub">
+              Launch Hard Lock automatically when you sign in (a Task Scheduler
+              task). Turning this on or off needs administrator rights, so you'll
+              get a Windows prompt to approve.
+            </div>
+          </div>
+
+          <div class="row row-toggle">
+            <div class="row-label" style="flex: 1;">
+              <div>Starts at logon: <span id="autostart-state" style="font-weight: 600;">—</span></div>
+              <div id="autostart-hint" class="row-note"></div>
+            </div>
+            <div class="toggle" id="autostart">
+              <div class="knob"></div>
+            </div>
+          </div>
+        </section>
+
         <div class="anti-cheat-note">
           <strong>Anti-cheat:</strong> weakening changes are deferred by your
           edit cooldown. Tired-you-at-11pm can't relax the lock to get more

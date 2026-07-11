@@ -226,8 +226,34 @@ class Api:
             "late_night_hour": self.config.late_night_hour,
             "day_reset_hour": self.config.day_reset_hour,
             "dry_run": self.config.dry_run,
+            "autostart_installed": self._autostart_installed(),
             "pending": self._pending_view(),
         }
+
+    @staticmethod
+    def _autostart_installed() -> bool:
+        try:
+            from . import autostart
+
+            return autostart.is_installed()
+        except Exception:
+            return False
+
+    def set_autostart(self, enabled) -> dict:
+        """Turn 'start at logon' on/off. Installing/removing the Task Scheduler
+        task needs admin, so this triggers a UAC prompt; the caller re-queries
+        get_autostart_status() afterwards to reflect the real state."""
+        from . import autostart
+
+        try:
+            triggered = autostart.install_elevated() if enabled else autostart.uninstall_elevated()
+        except Exception:
+            triggered = False
+        self._log("autostart", enabled=bool(enabled), triggered=triggered)
+        return {"triggered": triggered, "installed": self._autostart_installed()}
+
+    def get_autostart_status(self) -> dict:
+        return {"installed": self._autostart_installed()}
 
     def apply_settings(self, new: dict) -> dict:
         applied, deferred = self.config.apply_settings(new)

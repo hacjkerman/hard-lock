@@ -55,16 +55,27 @@
 
         <section class="section">
           <div class="section-head">
-            <div class="section-title">Daily cap</div>
-            <div class="section-sub">Total active computer time allowed per day. Idle time doesn't count.</div>
-          </div>
-
-          <div class="row">
-            <div class="row-label">Cap (minutes)</div>
-            <div class="row-value">
-              <input id="daily_cap_minutes" class="field" type="number" min="0" step="5" style="width: 110px;" />
-              <span class="muted xs" style="margin-left: 10px;">lower = tightening (instant)</span>
+            <div class="section-title">Per-day limits</div>
+            <div class="section-sub">
+              A different daily cap and hard cutoff for each day — today is
+              highlighted. Lowering a cap or setting an earlier cutoff applies
+              now; raising a cap or a later cutoff waits out your cooldown. Blank
+              cutoff = none that day. A cutoff after midnight (e.g. 01:30) belongs
+              to that night — a Friday 01:30 keeps you up until 1:30 Sat morning.
             </div>
+          </div>
+          <table class="perday">
+            <thead>
+              <tr><th>Day</th><th>Cap (min)</th><th>Cutoff</th></tr>
+            </thead>
+            <tbody id="perday-body"></tbody>
+          </table>
+        </section>
+
+        <section class="section">
+          <div class="section-head">
+            <div class="section-title">Today</div>
+            <div class="section-sub">Active computer time counts toward today's cap. Idle time doesn't.</div>
           </div>
 
           <div class="row">
@@ -90,16 +101,8 @@
 
         <section class="section">
           <div class="section-head">
-            <div class="section-title">Hard cutoff</div>
-            <div class="section-sub">Wall-clock time after which the computer shuts down regardless of usage.</div>
-          </div>
-
-          <div class="row">
-            <div class="row-label">Cutoff time</div>
-            <div class="row-value">
-              <input id="hard_cutoff_time" class="field" type="time" style="width: 130px;" />
-              <span class="muted xs" style="margin-left: 10px;">blank = disabled</span>
-            </div>
+            <div class="section-title">Shutdown grace</div>
+            <div class="section-sub">The countdown shown before the computer actually shuts down.</div>
           </div>
 
           <div class="row">

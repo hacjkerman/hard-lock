@@ -142,6 +142,40 @@ h1 {
   align-items: center;
 }
 
+/* ───────── Per-day limits table ───────── */
+.perday {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.perday th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 4px 8px 8px;
+}
+.perday td {
+  padding: 4px 8px;
+  border-top: 1px solid var(--divider);
+}
+.perday tbody tr.today td {
+  background: var(--accent-subtle);
+}
+.perday tbody tr.today .perday-day {
+  color: var(--accent);
+  font-weight: 600;
+}
+.perday-day {
+  color: var(--text);
+  white-space: nowrap;
+}
+.perday .field { width: 100%; }
+.perday .perday-cap { max-width: 88px; }
+.perday .perday-cutoff { max-width: 120px; }
+
 .anti-cheat-note {
   margin-top: 20px;
   padding: 12px 14px;

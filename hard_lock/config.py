@@ -4,6 +4,11 @@ import os
 import threading
 from pathlib import Path
 
+# Per-day schedule keys are cap_<day> / cutoff_<day>, indexed by
+# datetime.date.weekday() (Mon=0 … Sun=6).
+_DAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+_DAY_LABELS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+
 DEFAULTS = {
     "daily_cap_minutes": 480,
     "hard_cutoff_time": "23:30",
@@ -25,14 +30,8 @@ DEFAULTS = {
 # For each configurable key, a function returning True when the proposed new
 # value is a "weakening" (i.e. relaxes the lock) relative to the current value
 # and therefore must be deferred by the edit cooldown. Tightening is immediate.
-def _later_cutoff(old, new) -> bool:
-    if new is None and old is not None:
-        return True
-    if old is None or new is None:
-        return False
-    return _hhmm_to_min(new) > _hhmm_to_min(old)
-
-
+# Cutoff keys are NOT here — a "later" cutoff depends on day_reset_hour (a
+# 01:30 cutoff is later at night than 23:30), so they weaken via a Config method.
 def _hhmm_to_min(s: str) -> int:
     h, m = map(int, s.split(":"))
     return h * 60 + m
@@ -57,7 +56,6 @@ def _more_games(old, new) -> bool:
 
 WEAKENING = {
     "daily_cap_minutes": lambda old, new: int(new) > int(old),
-    "hard_cutoff_time": _later_cutoff,
     "warning_minutes_before": _fewer_warnings,
     "grace_seconds": lambda old, new: int(new) > int(old),
     "idle_threshold_seconds": lambda old, new: int(new) < int(old),
@@ -70,6 +68,11 @@ WEAKENING = {
     "game_defer_grace_seconds": lambda old, new: int(new) > int(old),
     "dry_run": lambda old, new: bool(new) and not bool(old),
 }
+
+# Each per-day cap weakens like the global one (raising it is deferred). Per-day
+# cutoffs weaken via Config._cutoff_weakens (day_reset-aware), same as the global.
+for _day in _DAYS:
+    WEAKENING[f"cap_{_day}"] = lambda old, new: int(new) > int(old)
 
 
 class Config:
@@ -106,6 +109,11 @@ class Config:
                     pass
                 data = dict(DEFAULTS)
                 write_defaults = True
+        # Seed the per-day schedule from the scalar baseline for any day that
+        # doesn't have its own value yet (older configs predate per-day limits).
+        for _d in _DAYS:
+            data.setdefault(f"cap_{_d}", data.get("daily_cap_minutes", DEFAULTS["daily_cap_minutes"]))
+            data.setdefault(f"cutoff_{_d}", data.get("hard_cutoff_time", DEFAULTS["hard_cutoff_time"]))
         if write_defaults:
             path.write_text(json.dumps(data, indent=2), encoding="utf-8")
         # Migrate legacy pending_raise → pending_changes["daily_cap_minutes"]
@@ -163,17 +171,39 @@ class Config:
                 self._data["pending_changes"] = remaining
                 self.save()
 
-    @property
-    def daily_cap_seconds(self) -> int:
-        return int(self._data["daily_cap_minutes"]) * 60
+    def logical_weekday(self, now: dt.datetime | None = None) -> int:
+        """Weekday (Mon=0 … Sun=6) of the current *logical* day. Because the day
+        rolls at day_reset_hour, 02:00 Saturday still counts as Friday — so
+        Friday's cap/cutoff governs Friday night into the small hours."""
+        return dt.date.fromisoformat(self.logical_date(now)).weekday()
 
     @property
     def daily_cap_minutes(self) -> int:
-        return int(self._data["daily_cap_minutes"])
+        key = f"cap_{_DAYS[self.logical_weekday()]}"
+        return int(self._data.get(key, self._data["daily_cap_minutes"]))
+
+    @property
+    def daily_cap_seconds(self) -> int:
+        return self.daily_cap_minutes * 60
 
     @property
     def hard_cutoff_time(self):
-        return self._data.get("hard_cutoff_time")
+        key = f"cutoff_{_DAYS[self.logical_weekday()]}"
+        return self._data.get(key, self._data.get("hard_cutoff_time"))
+
+    def cap_by_day(self) -> list:
+        return [int(self._data.get(f"cap_{d}", self._data["daily_cap_minutes"])) for d in _DAYS]
+
+    def cutoff_by_day(self) -> list:
+        return [self._data.get(f"cutoff_{d}", self._data.get("hard_cutoff_time")) for d in _DAYS]
+
+    @staticmethod
+    def day_keys() -> list:
+        return list(_DAYS)
+
+    @staticmethod
+    def day_labels() -> list:
+        return list(_DAY_LABELS)
 
     @property
     def warning_minutes_before(self) -> list:
@@ -248,25 +278,39 @@ class Config:
 
     def complete_setup(self, values: dict) -> None:
         with self._lock:
-            for key, value in (values or {}).items():
+            vals = values or {}
+            for key, value in vals.items():
                 if key in self._SETUP_KEYS:
                     self._data[key] = value
+            # The wizard sets one baseline cap/cutoff; apply it to every day so
+            # the per-day schedule starts uniform (users tune weekends later).
+            if "daily_cap_minutes" in vals:
+                for d in _DAYS:
+                    self._data[f"cap_{d}"] = self._data["daily_cap_minutes"]
+            if "hard_cutoff_time" in vals:
+                for d in _DAYS:
+                    self._data[f"cutoff_{d}"] = self._data["hard_cutoff_time"]
             self._data["setup_completed"] = True
             self.save()
 
     def remaining_seconds(self, state) -> float:
         return max(0.0, self.daily_cap_seconds - state.used_seconds)
 
-    def cutoff_remaining_seconds(self):
-        t = self._data.get("hard_cutoff_time")
+    def cutoff_remaining_seconds(self, now: dt.datetime | None = None):
+        now = now or dt.datetime.now()
+        key = f"cutoff_{_DAYS[self.logical_weekday(now)]}"
+        t = self._data.get(key, self._data.get("hard_cutoff_time"))
         if not t:
             return None
         h, m = map(int, t.split(":"))
-        now = dt.datetime.now()
-        cutoff = now.replace(hour=h, minute=m, second=0, microsecond=0)
-        if cutoff < now:
-            return 0.0
-        return (cutoff - now).total_seconds()
+        # The cutoff belongs to the current logical day. An after-midnight
+        # cutoff (hour < day_reset_hour, e.g. 01:30) lands on the *next*
+        # calendar date but still caps the same logical (Fri) night.
+        d = dt.date.fromisoformat(self.logical_date(now))
+        if h < self.day_reset_hour:
+            d = d + dt.timedelta(days=1)
+        cutoff = dt.datetime(d.year, d.month, d.day, h, m)
+        return max(0.0, (cutoff - now).total_seconds())
 
     def pending_summary(self) -> str:
         pending = self._data.get("pending_changes") or {}
@@ -280,12 +324,43 @@ class Config:
             )
         return "Pending: " + "; ".join(parts)
 
+    def _logical_cutoff_minute(self, hhmm: str) -> int:
+        """Minutes from the day reset to this cutoff, wrapping past midnight, so
+        a later night (01:30 with a 04:00 reset) sorts after an earlier one."""
+        return (_hhmm_to_min(hhmm) - self.day_reset_hour * 60) % (24 * 60)
+
+    def _cutoff_weakens(self, old, new) -> bool:
+        if new is None and old is not None:
+            return True  # removing the cutoff drops a limit → weakening
+        if old is None or new is None:
+            return False  # adding a cutoff is a tightening
+        return self._logical_cutoff_minute(new) > self._logical_cutoff_minute(old)
+
+    def _weakens(self, key: str, old, new) -> bool:
+        if key == "hard_cutoff_time" or key.startswith("cutoff_"):
+            return self._cutoff_weakens(old, new)
+        fn = WEAKENING.get(key)
+        return bool(fn and fn(old, new))
+
     def apply_settings(self, new: dict) -> tuple[list[str], list[str]]:
         """Apply a dict of settings. Tightening changes take effect immediately;
         weakening changes are deferred by edit_cooldown_hours. Returns
         (applied_descriptions, deferred_descriptions)."""
         applied: list[str] = []
         deferred: list[str] = []
+        # A bare daily_cap_minutes / hard_cutoff_time means "set every day" — it
+        # expands to the per-day keys (an explicit cap_<day> in the same call
+        # wins). This keeps onboarding and legacy callers working now that the
+        # per-day schedule is the source of truth.
+        new = dict(new)
+        if "daily_cap_minutes" in new:
+            v = new.pop("daily_cap_minutes")
+            for d in _DAYS:
+                new.setdefault(f"cap_{d}", v)
+        if "hard_cutoff_time" in new:
+            v = new.pop("hard_cutoff_time")
+            for d in _DAYS:
+                new.setdefault(f"cutoff_{d}", v)
         with self._lock:
             pending = dict(self._data.get("pending_changes") or {})
 
@@ -298,8 +373,7 @@ class Config:
                 old = self._data.get(key)
                 if value == old and key not in pending:
                     continue
-                weakens = WEAKENING.get(key, lambda o, n: False)
-                if key in WEAKENING and weakens(old, value):
+                if self._weakens(key, old, value):
                     pending[key] = {"value": value, "effective_at": effective_at}
                     deferred.append(f"{key}: {old} → {value}")
                 else:

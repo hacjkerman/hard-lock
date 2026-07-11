@@ -284,6 +284,11 @@ class Api:
         return {
             "daily_cap_minutes": self.config.daily_cap_minutes,
             "hard_cutoff_time": self.config.hard_cutoff_time,
+            "cap_by_day": self.config.cap_by_day(),
+            "cutoff_by_day": self.config.cutoff_by_day(),
+            "day_keys": self.config.day_keys(),
+            "day_labels": self.config.day_labels(),
+            "today_index": self.config.logical_weekday(),
             "warning_minutes_before": self.config.warning_minutes_before,
             "grace_seconds": self.config.grace_seconds,
             "idle_threshold_seconds": self.config.idle_threshold_seconds,

@@ -16,7 +16,11 @@ rested version made.
 - **Daily active cap** — counts time you're actually at the keyboard (idle time,
   past a threshold, doesn't count). Default 8h.
 - **Hard cutoff** — a wall-clock time after which the machine won't stay on.
-  Default 23:30.
+  Default 23:30. A cutoff after midnight (e.g. `01:30`) belongs to that night —
+  a Friday `01:30` keeps you up until 1:30 Saturday morning.
+- **Per-day limits** — the daily cap and hard cutoff can differ by day of week
+  (e.g. a bigger cap and later cutoff on weekends). Set them in Settings → Per-day
+  limits. Lowering a cap / earlier cutoff applies now; raising / later is deferred.
 - **Late-night timer** — if you sign in *after* a configured hour (default 23:00),
   a prompt asks how long you intend to work; that timer only ever *shortens* the
   time you have, never extends it.

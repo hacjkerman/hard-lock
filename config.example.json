@@ -1,6 +1,11 @@
 {
   "daily_cap_minutes": 480,
   "hard_cutoff_time": "23:30",
+  "cap_fri": 480,
+  "cap_sat": 720,
+  "cap_sun": 720,
+  "cutoff_fri": "01:30",
+  "cutoff_sat": "01:30",
   "warning_minutes_before": [30, 10, 5, 1],
   "grace_seconds": 60,
   "idle_threshold_seconds": 120,

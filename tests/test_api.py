@@ -96,6 +96,15 @@ class ApiStatusTestCase(unittest.TestCase):
         expected = 100 * config.cutoff_remaining_seconds() / config.daily_cap_seconds
         self.assertAlmostEqual(s["remaining_pct"], round(expected, 1), delta=0.5)
 
+    def test_get_settings_includes_per_day_schedule(self):
+        api, config, _ = make({"daily_cap_minutes": 480, "hard_cutoff_time": "23:30"})
+        s = api.get_settings()
+        self.assertEqual(s["day_keys"], ["mon", "tue", "wed", "thu", "fri", "sat", "sun"])
+        self.assertEqual(s["cap_by_day"], [480] * 7)
+        self.assertEqual(s["cutoff_by_day"], ["23:30"] * 7)
+        self.assertEqual(s["today_index"], config.logical_weekday())
+        self.assertEqual(len(s["day_labels"]), 7)
+
     def test_bar_tracks_timer_relative_to_cap(self):
         # A 30-min timer against an 8h cap reads ~6.25% (30m / 480m).
         api, _, _ = make({"daily_cap_minutes": 480, "hard_cutoff_time": None})
@@ -413,10 +422,12 @@ class ApiStatusTestCase(unittest.TestCase):
     def test_due_pending_applies_during_tick(self):
         """A queued cap-raise that has come due should activate while the app
         is running (on the next tick), not only after a restart."""
+        from hard_lock.config import _DAYS
         api, config, _ = make({"daily_cap_minutes": 480, "edit_cooldown_hours": 24})
-        config.apply_settings({"daily_cap_minutes": 600})
+        today = _DAYS[config.logical_weekday()]
+        config.apply_settings({f"cap_{today}": 600})  # weakening → deferred
         past = (dt.datetime.now() - dt.timedelta(minutes=1)).isoformat()
-        config._data["pending_changes"]["daily_cap_minutes"]["effective_at"] = past
+        config._data["pending_changes"][f"cap_{today}"]["effective_at"] = past
 
         api.tick()
         self.assertEqual(config.daily_cap_minutes, 600)

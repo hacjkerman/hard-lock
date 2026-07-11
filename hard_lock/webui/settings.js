@@ -1,5 +1,16 @@
 function $(id) { return document.getElementById(id); }
 
+let dayKeys = [];  // ["mon", … "sun"], from get_settings
+const DAY_LABEL = { mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu", fri: "Fri", sat: "Sat", sun: "Sun" };
+
+function fieldLabel(key) {
+  let m = key.match(/^cap_(\w+)$/);
+  if (m) return `${DAY_LABEL[m[1]] || m[1]} cap`;
+  m = key.match(/^cutoff_(\w+)$/);
+  if (m) return `${DAY_LABEL[m[1]] || m[1]} cutoff`;
+  return key;
+}
+
 function fmtValue(key, value) {
   if (value === null) return "disabled";
   if (key === "dry_run") return value ? "ON" : "OFF";
@@ -30,7 +41,7 @@ function renderPending(pending) {
       </div>
       <button class="btn sm danger pending-cancel">Cancel</button>
     `;
-    el.querySelector(".pending-field").textContent = p.key;
+    el.querySelector(".pending-field").textContent = fieldLabel(p.key);
     el.querySelector(".new").textContent = fmtValue(p.key, p.value);
     el.querySelector(".pending-cancel").addEventListener("click", async () => {
       await window.pywebview.api.cancel_pending(p.key);
@@ -46,9 +57,27 @@ function escapeHtml(s) {
   }[c]));
 }
 
+function buildPerDay(settings) {
+  dayKeys = settings.day_keys || [];
+  const body = $("perday-body");
+  body.innerHTML = "";
+  dayKeys.forEach((k, i) => {
+    const tr = document.createElement("tr");
+    if (i === settings.today_index) tr.className = "today";
+    tr.innerHTML = `
+      <td class="perday-day"></td>
+      <td><input id="cap_${k}" class="field perday-cap" type="number" min="0" step="5" /></td>
+      <td><input id="cutoff_${k}" class="field perday-cutoff" type="time" /></td>
+    `;
+    tr.querySelector(".perday-day").textContent = settings.day_labels[i];
+    body.appendChild(tr);
+    $(`cap_${k}`).value = settings.cap_by_day[i];
+    $(`cutoff_${k}`).value = settings.cutoff_by_day[i] || "";
+  });
+}
+
 function applyFormValues(settings) {
-  $("daily_cap_minutes").value = settings.daily_cap_minutes;
-  $("hard_cutoff_time").value = settings.hard_cutoff_time || "";
+  buildPerDay(settings);
   $("warning_minutes_before").value = (settings.warning_minutes_before || []).join(",");
   $("grace_seconds").value = settings.grace_seconds;
   $("idle_threshold_seconds").value = settings.idle_threshold_seconds;
@@ -104,11 +133,7 @@ function readFormValues() {
     .map((x) => parseInt(x, 10))
     .filter((n) => Number.isFinite(n) && n >= 0);
 
-  const cutoff = $("hard_cutoff_time").value.trim();
-
-  return {
-    daily_cap_minutes: parseInt($("daily_cap_minutes").value, 10),
-    hard_cutoff_time: cutoff || null,
+  const form = {
     warning_minutes_before: [...new Set(warnings)].sort((a, b) => b - a),
     grace_seconds: parseInt($("grace_seconds").value, 10),
     idle_threshold_seconds: parseInt($("idle_threshold_seconds").value, 10),
@@ -116,6 +141,12 @@ function readFormValues() {
     late_night_hour: parseInt($("late_night_hour").value, 10),
     dry_run: $("dry_run").classList.contains("on"),
   };
+  for (const k of dayKeys) {
+    form[`cap_${k}`] = parseInt($(`cap_${k}`).value, 10);
+    const c = $(`cutoff_${k}`).value.trim();
+    form[`cutoff_${k}`] = c || null;
+  }
+  return form;
 }
 
 async function reload() {
@@ -165,9 +196,11 @@ function wire() {
       setStatus(String(err), "err");
       return;
     }
-    if (!Number.isFinite(form.daily_cap_minutes) || form.daily_cap_minutes < 0) {
-      setStatus("Daily cap must be a non-negative number.", "err");
-      return;
+    for (const k of dayKeys) {
+      if (!Number.isFinite(form[`cap_${k}`]) || form[`cap_${k}`] < 0) {
+        setStatus("Each day's cap must be a non-negative number.", "err");
+        return;
+      }
     }
     if (!Number.isFinite(form.late_night_hour) || form.late_night_hour < 0 || form.late_night_hour > 24) {
       setStatus("Late-night hour must be between 0 and 24.", "err");

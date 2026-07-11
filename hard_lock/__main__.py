@@ -82,6 +82,10 @@ def main(argv: "list[str] | None" = None) -> int:
     hud_window_ref: list = [None]
     prompt_window_ref: list = [None]
     tray_ref: list = [None]
+    # Track HUD visibility so we can auto-hide it during a game and restore it
+    # after — but only if we were the ones who hid it.
+    hud_visible: list[bool] = [False]
+    hud_auto_hidden: list[bool] = [False]
     grace_requested: list[bool] = [False]
     # When True, the HUD's close button really closes (grace/quit); otherwise a
     # close just hides it to the tray so the app keeps running in the background.
@@ -126,6 +130,7 @@ def main(argv: "list[str] | None" = None) -> int:
         if existing is not None:
             try:
                 existing.show()
+                hud_visible[0] = True
                 _dismiss_prompt()  # HUD already up (on-demand path) → safe to destroy now
                 return
             except Exception:
@@ -144,6 +149,7 @@ def main(argv: "list[str] | None" = None) -> int:
             easy_drag=False,
         )
         hud_window_ref[0] = win
+        hud_visible[0] = True
 
         def _on_hud_closing():
             # Hide to the tray instead of exiting — unless we're really shutting
@@ -154,6 +160,7 @@ def main(argv: "list[str] | None" = None) -> int:
                 win.hide()
             except Exception:
                 pass
+            hud_visible[0] = False
             return False
 
         try:
@@ -240,6 +247,27 @@ def main(argv: "list[str] | None" = None) -> int:
                 win.hide()
             except Exception:
                 pass
+        hud_visible[0] = False
+
+    def on_game_change(active: bool) -> None:
+        # Auto-hide the HUD while a game is running so its always-on-top window
+        # can't float over the game; restore it afterward, but only if WE hid it
+        # (don't resurrect a HUD the user chose to tuck away).
+        try:
+            win = hud_window_ref[0]
+            if win is None:
+                return
+            if active:
+                if hud_visible[0]:
+                    win.hide()
+                    hud_visible[0] = False
+                    hud_auto_hidden[0] = True
+            elif hud_auto_hidden[0]:
+                hud_auto_hidden[0] = False
+                win.show()
+                hud_visible[0] = True
+        except Exception:
+            pass
 
     def open_session_prompt() -> None:
         # The "set a work timer" prompt, used both at late-night launch and
@@ -277,6 +305,7 @@ def main(argv: "list[str] | None" = None) -> int:
         hide_hud=hide_hud,
         open_session_prompt=open_session_prompt,
         league_active=league.is_game_active,
+        on_game_change=on_game_change,
         event_log=event_log,
         day_history=day_history,
     )

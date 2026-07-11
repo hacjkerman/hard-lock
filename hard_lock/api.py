@@ -31,7 +31,7 @@ class Api:
     def __init__(self, config, state, tracker, request_grace, open_settings,
                  open_hud=None, session_deadline: "dt.datetime | None" = None,
                  event_log=None, day_history=None, open_history=None, hide_hud=None,
-                 open_session_prompt=None, league_active=None):
+                 open_session_prompt=None, league_active=None, on_game_change=None):
         self.config = config
         self.state = state
         self.tracker = tracker
@@ -41,6 +41,9 @@ class Api:
         self._open_history = open_history
         self._hide_hud = hide_hud
         self._open_session_prompt = open_session_prompt
+        # Called with True when a defer-for game starts holding, False when it
+        # releases — the app uses it to auto-hide the HUD during a game.
+        self._on_game_change = on_game_change
         self._event_log = event_log
         self._day_history = day_history
         # Wall-clock deadline for the late-night session timer, or None.
@@ -50,6 +53,9 @@ class Api:
         self._league_last_active: "float | None" = None
         self._league_checked_at: "float | None" = None
         self._shutdown_held = False
+        self._game_defer_prev = False
+        # Dry-run reached the limit at least once (so we don't re-log every tick).
+        self._dry_run_fired = False
         self._warnings_fired: set[int] = set()
         self._grace_requested = False
         # Serializes the poll critical section. pywebview runs each JS→Python
@@ -206,6 +212,14 @@ class Api:
             cap_remaining, cutoff_remaining, session_remaining = self._limits()
             effective = self._effective_from(cap_remaining, cutoff_remaining, session_remaining)
             deferred = self._deferred_for_game()
+            # Tell the app when a game starts/stops holding (→ auto-hide the HUD).
+            if deferred != self._game_defer_prev:
+                self._game_defer_prev = deferred
+                if self._on_game_change:
+                    try:
+                        self._on_game_change(deferred)
+                    except Exception:
+                        pass
             # While a game holds the shutdown, a "N minutes left" warning would be
             # a lie (nothing is going to shut down) AND could pop over the game —
             # so fire warnings only when the shutdown is actually imminent.
@@ -219,11 +233,21 @@ class Api:
                         self._log("shutdown_held", reason="game")
                     return
                 self._shutdown_held = False
+                if self.config.dry_run:
+                    # Dry-run must NOT tear down the app / exit — otherwise once
+                    # you're past the limit you can never reach Settings to turn
+                    # dry-run off. Register the (simulated) shutdown once and keep
+                    # running so the app stays fully usable.
+                    if not self._dry_run_fired:
+                        self._dry_run_fired = True
+                        self._log_shutdown(cap_remaining, cutoff_remaining, session_remaining)
+                    return
                 self._grace_requested = True
                 self._log_shutdown(cap_remaining, cutoff_remaining, session_remaining)
                 self._request_grace()
             else:
                 self._shutdown_held = False
+                self._dry_run_fired = False
 
     def _bar_metrics(self, cap_remaining, cutoff_remaining, session_remaining,
                      used_seconds, cap_seconds) -> dict:
@@ -270,6 +294,7 @@ class Api:
             "session_remaining_hm": _fmt_hm(session_remaining) if session_remaining is not None else None,
             "session_active": session_remaining is not None,
             "shutdown_held": self._shutdown_held,
+            "dry_run_fired": self._dry_run_fired,
             "used_seconds": used_seconds,
             "used_hm": _fmt_hm(used_seconds),
             "used_pct": used_pct,

@@ -169,7 +169,8 @@ class ApiStatusTestCase(unittest.TestCase):
         graced = []
         # cap already spent, so effective ~0 → below grace_seconds
         api, _, _ = make(
-            {"daily_cap_minutes": 60, "hard_cutoff_time": None, "grace_seconds": 60},
+            {"daily_cap_minutes": 60, "hard_cutoff_time": None, "grace_seconds": 60,
+             "dry_run": False},
             used_seconds=60 * 60,
             request_grace=lambda: graced.append(1),
         )
@@ -223,7 +224,7 @@ class ApiStatusTestCase(unittest.TestCase):
         graced = []
         api, _, _ = make(
             {"daily_cap_minutes": 60, "hard_cutoff_time": None, "grace_seconds": 60,
-             "game_defer_grace_seconds": 180},
+             "game_defer_grace_seconds": 180, "dry_run": False},
             used_seconds=3600.0, request_grace=lambda: graced.append(1),
             league_active=lambda games: False,
         )
@@ -234,7 +235,8 @@ class ApiStatusTestCase(unittest.TestCase):
     def test_no_defer_when_game_never_ran(self):
         graced = []
         api, _, _ = make(
-            {"daily_cap_minutes": 60, "hard_cutoff_time": None, "grace_seconds": 60},
+            {"daily_cap_minutes": 60, "hard_cutoff_time": None, "grace_seconds": 60,
+             "dry_run": False},
             used_seconds=3600.0, request_grace=lambda: graced.append(1),
             league_active=lambda games: False,
         )
@@ -245,12 +247,52 @@ class ApiStatusTestCase(unittest.TestCase):
         graced = []
         api, _, _ = make(
             {"daily_cap_minutes": 60, "hard_cutoff_time": None, "grace_seconds": 60,
-             "defer_for_games": []},
+             "defer_for_games": [], "dry_run": False},
             used_seconds=3600.0, request_grace=lambda: graced.append(1),
             league_active=lambda games: True,
         )
         api.tick()
         self.assertEqual(graced, [1])  # feature off → shutdown despite game
+
+    def test_dry_run_does_not_tear_down_at_the_limit(self):
+        # Dry-run must NOT trigger grace/teardown (which would exit the app and
+        # lock you out of changing the setting). It registers the hit and runs on.
+        graced = []
+        api, _, _ = make(
+            {"daily_cap_minutes": 60, "hard_cutoff_time": None, "grace_seconds": 60,
+             "dry_run": True},
+            used_seconds=3600.0, request_grace=lambda: graced.append(1),
+        )
+        api.tick()
+        self.assertEqual(graced, [])  # no real grace/teardown in dry-run
+        self.assertTrue(api.get_status()["dry_run_fired"])
+
+    def test_dry_run_logs_shutdown_once(self):
+        events = EventLog(Path(tempfile.mkdtemp()) / "e.jsonl")
+        api, _, _ = make(
+            {"daily_cap_minutes": 60, "hard_cutoff_time": None, "grace_seconds": 60,
+             "dry_run": True},
+            used_seconds=3600.0, event_log=events,
+        )
+        api.tick()
+        api.tick()
+        api.tick()
+        shutdowns = [e for e in events.all() if e.get("type") == "shutdown"]
+        self.assertEqual(len(shutdowns), 1)  # logged once, not every tick
+        self.assertTrue(shutdowns[0]["dry_run"])
+
+    def test_on_game_change_fires_on_transitions(self):
+        calls = []
+        api, _, _ = make(
+            {"daily_cap_minutes": 480, "hard_cutoff_time": None},
+            league_active=lambda games: True,
+        )
+        api._on_game_change = lambda active: calls.append(active)
+        api.tick()  # game running → True
+        api._league_active = lambda games: False
+        api._league_last_active = time.monotonic() - 240  # ended, past buffer
+        api.tick()  # released → False
+        self.assertEqual(calls, [True, False])
 
     def test_tracker_accumulates_into_state(self):
         api, _, state = make(tracker_delta=5.0)

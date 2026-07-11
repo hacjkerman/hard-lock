@@ -37,7 +37,11 @@ function render(status) {
   $("timer-btn-label").textContent = status.session_active ? "Change work timer" : "Set a work timer";
 
   $("held-note").classList.toggle("hidden", !status.shutdown_held);
-  $("dry-run-note").classList.toggle("hidden", !status.dry_run);
+  const dn = $("dry-run-note");
+  dn.classList.toggle("hidden", !status.dry_run);
+  dn.textContent = status.dry_run_fired
+    ? "DRY RUN — limit reached; a real shutdown would fire now"
+    : "DRY RUN — shutdown will be simulated";
 
   for (const m of status.recent_warnings) {
     if (!shownWarnings.has(m)) {

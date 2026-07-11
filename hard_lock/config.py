@@ -13,6 +13,10 @@ DEFAULTS = {
     "edit_cooldown_hours": 24,
     "late_night_hour": 23,
     "day_reset_hour": 4,
+    # Don't shut down while one of these games is running; wait until it ends
+    # plus game_defer_grace_seconds. Empty list disables the feature.
+    "defer_for_games": ["League of Legends.exe"],
+    "game_defer_grace_seconds": 180,
     "dry_run": True,
     "setup_completed": False,
     "pending_changes": {},
@@ -43,6 +47,14 @@ def _fewer_warnings(old, new) -> bool:
     return not old_set.issubset(new_set)
 
 
+def _more_games(old, new) -> bool:
+    # Adding a game to the defer list gives the lock more reasons to hold off,
+    # so it's a weakening. Removing games is a tightening (immediate).
+    old_set = {str(x).lower() for x in (old or [])}
+    new_set = {str(x).lower() for x in (new or [])}
+    return not new_set.issubset(old_set)
+
+
 WEAKENING = {
     "daily_cap_minutes": lambda old, new: int(new) > int(old),
     "hard_cutoff_time": _later_cutoff,
@@ -53,6 +65,9 @@ WEAKENING = {
     # Raising the late-night hour makes the timer prompt fire later (or never
     # at >=24), which relaxes the lock, so treat it as a weakening.
     "late_night_hour": lambda old, new: int(new) > int(old),
+    # Deferring the shutdown for games (adding one / a longer buffer) relaxes it.
+    "defer_for_games": _more_games,
+    "game_defer_grace_seconds": lambda old, new: int(new) > int(old),
     "dry_run": lambda old, new: bool(new) and not bool(old),
 }
 
@@ -199,6 +214,14 @@ class Config:
     @property
     def day_reset_hour(self) -> int:
         return int(self._data.get("day_reset_hour", 4))
+
+    @property
+    def defer_for_games(self) -> list:
+        return list(self._data.get("defer_for_games") or [])
+
+    @property
+    def game_defer_grace_seconds(self) -> int:
+        return int(self._data.get("game_defer_grace_seconds", 180))
 
     def logical_date(self, now: dt.datetime | None = None) -> str:
         """The usage 'day' key. The day rolls over at day_reset_hour (04:00 by

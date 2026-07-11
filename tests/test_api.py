@@ -1,6 +1,7 @@
 import datetime as dt
 import json
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -39,6 +40,7 @@ def make(config_overrides=None, used_seconds=0.0, tracker_delta=0.0,
         open_hud=api_kwargs.get("open_hud", lambda: None),
         hide_hud=api_kwargs.get("hide_hud"),
         open_session_prompt=api_kwargs.get("open_session_prompt"),
+        league_active=api_kwargs.get("league_active"),
         event_log=event_log,
         day_history=day_history,
     )
@@ -128,6 +130,63 @@ class ApiStatusTestCase(unittest.TestCase):
         )
         api.tick()
         self.assertEqual(graced, [1])
+
+    # ───────── don't-shut-down-during-a-game ─────────
+    def test_shutdown_held_while_game_active(self):
+        graced = []
+        api, _, _ = make(
+            {"daily_cap_minutes": 60, "hard_cutoff_time": None, "grace_seconds": 60},
+            used_seconds=3600.0, request_grace=lambda: graced.append(1),
+            league_active=lambda games: True,
+        )
+        api.tick()
+        self.assertEqual(graced, [])  # NOT shut down — game in progress
+        self.assertTrue(api.get_status()["shutdown_held"])
+
+    def test_shutdown_held_within_buffer_after_game(self):
+        graced = []
+        api, _, _ = make(
+            {"daily_cap_minutes": 60, "hard_cutoff_time": None, "grace_seconds": 60,
+             "game_defer_grace_seconds": 180},
+            used_seconds=3600.0, request_grace=lambda: graced.append(1),
+            league_active=lambda games: False,
+        )
+        api._league_last_active = time.monotonic() - 60  # game ended 1 min ago
+        api.tick()
+        self.assertEqual(graced, [])  # still held (within the 3-min buffer)
+
+    def test_shutdown_proceeds_after_buffer(self):
+        graced = []
+        api, _, _ = make(
+            {"daily_cap_minutes": 60, "hard_cutoff_time": None, "grace_seconds": 60,
+             "game_defer_grace_seconds": 180},
+            used_seconds=3600.0, request_grace=lambda: graced.append(1),
+            league_active=lambda games: False,
+        )
+        api._league_last_active = time.monotonic() - 240  # ended 4 min ago
+        api.tick()
+        self.assertEqual(graced, [1])  # buffer elapsed → shutdown fires
+
+    def test_no_defer_when_game_never_ran(self):
+        graced = []
+        api, _, _ = make(
+            {"daily_cap_minutes": 60, "hard_cutoff_time": None, "grace_seconds": 60},
+            used_seconds=3600.0, request_grace=lambda: graced.append(1),
+            league_active=lambda games: False,
+        )
+        api.tick()
+        self.assertEqual(graced, [1])  # no game seen → normal shutdown
+
+    def test_defer_disabled_when_no_games_configured(self):
+        graced = []
+        api, _, _ = make(
+            {"daily_cap_minutes": 60, "hard_cutoff_time": None, "grace_seconds": 60,
+             "defer_for_games": []},
+            used_seconds=3600.0, request_grace=lambda: graced.append(1),
+            league_active=lambda games: True,
+        )
+        api.tick()
+        self.assertEqual(graced, [1])  # feature off → shutdown despite game
 
     def test_tracker_accumulates_into_state(self):
         api, _, state = make(tracker_delta=5.0)

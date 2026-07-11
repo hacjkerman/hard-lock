@@ -88,6 +88,24 @@ class ConfigTestCase(unittest.TestCase):
         self.assertEqual(cfg.late_night_hour, 23)
         self.assertTrue(deferred)
 
+    def test_adding_a_defer_game_is_weakening(self):
+        cfg = self._cfg(defer_for_games=["League of Legends.exe"])
+        _, deferred = cfg.apply_settings({"defer_for_games": ["League of Legends.exe", "dota2.exe"]})
+        self.assertEqual(cfg.defer_for_games, ["League of Legends.exe"])  # not yet
+        self.assertTrue(deferred)
+
+    def test_removing_a_defer_game_is_tightening(self):
+        cfg = self._cfg(defer_for_games=["League of Legends.exe", "dota2.exe"])
+        applied, _ = cfg.apply_settings({"defer_for_games": ["League of Legends.exe"]})
+        self.assertEqual(cfg.defer_for_games, ["League of Legends.exe"])
+        self.assertTrue(applied)
+
+    def test_raising_game_defer_buffer_is_weakening(self):
+        cfg = self._cfg(game_defer_grace_seconds=180)
+        _, deferred = cfg.apply_settings({"game_defer_grace_seconds": 600})
+        self.assertEqual(cfg.game_defer_grace_seconds, 180)
+        self.assertTrue(deferred)
+
     def test_lowering_late_night_hour_is_tightening(self):
         cfg = self._cfg(late_night_hour=23)
         applied, _ = cfg.apply_settings({"late_night_hour": 21})

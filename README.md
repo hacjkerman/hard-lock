@@ -21,6 +21,9 @@ rested version made.
   a prompt asks how long you intend to work; that timer only ever *shortens* the
   time you have, never extends it.
 - **Warnings** fire at 30 / 10 / 5 / 1 minutes before shutdown.
+- **Don't-kill-my-game** — if a configured game (League of Legends by default) is
+  in progress when a limit is hit, the shutdown is held until the game ends plus
+  a buffer (3 min by default). See `defer_for_games` / `game_defer_grace_seconds`.
 - **Grace countdown** — a final, uncancelable 60s window to save your work.
 - **Tighten now, weaken later** — stricter changes apply immediately; looser
   changes are queued and only activate after the edit cooldown (default 24h).

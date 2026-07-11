@@ -35,6 +35,7 @@ function render(status) {
   }
   $("timer-btn-label").textContent = status.session_active ? "Change work timer" : "Set a work timer";
 
+  $("held-note").classList.toggle("hidden", !status.shutdown_held);
   $("dry-run-note").classList.toggle("hidden", !status.dry_run);
 
   for (const m of status.recent_warnings) {

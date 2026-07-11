@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import datetime as dt
 import threading
+import time
 
 
 def _fmt_hm(seconds: float) -> str:
@@ -30,7 +31,7 @@ class Api:
     def __init__(self, config, state, tracker, request_grace, open_settings,
                  open_hud=None, session_deadline: "dt.datetime | None" = None,
                  event_log=None, day_history=None, open_history=None, hide_hud=None,
-                 open_session_prompt=None):
+                 open_session_prompt=None, league_active=None):
         self.config = config
         self.state = state
         self.tracker = tracker
@@ -44,6 +45,11 @@ class Api:
         self._day_history = day_history
         # Wall-clock deadline for the late-night session timer, or None.
         self._session_deadline = session_deadline
+        # Detects whether a "don't shut down mid-game" process is running.
+        self._league_active = league_active
+        self._league_last_active: "float | None" = None
+        self._league_checked_at: "float | None" = None
+        self._shutdown_held = False
         self._warnings_fired: set[int] = set()
         self._grace_requested = False
         # Serializes the poll critical section. pywebview runs each JS→Python
@@ -153,6 +159,29 @@ class Api:
                 effective = min(effective, limit)
         return effective
 
+    def _track_league(self) -> None:
+        """Note when a defer-for game was last seen running (throttled). Keeps
+        _league_last_active current so a game that ends just before the cutoff
+        still holds the shutdown for the full buffer."""
+        games = self.config.defer_for_games
+        if not games or self._league_active is None:
+            return
+        now = time.monotonic()
+        if self._league_checked_at is not None and now - self._league_checked_at < 5.0:
+            return  # check at most every ~5s; the buffer (minutes) tolerates this
+        self._league_checked_at = now
+        try:
+            if self._league_active(games):
+                self._league_last_active = now
+        except Exception:
+            pass
+
+    def _deferred_for_game(self) -> bool:
+        """True while a defer-for game is running or ended within the buffer."""
+        if not self.config.defer_for_games or self._league_last_active is None:
+            return False
+        return (time.monotonic() - self._league_last_active) < self.config.game_defer_grace_seconds
+
     def tick(self) -> None:
         """Advance the clock once: accumulate active time, fire warnings, and
         trigger the grace/shutdown when time runs out. Driven by a single
@@ -172,14 +201,24 @@ class Api:
             delta = self.tracker.tick()
             self.state.accumulate(delta)
             self.state.save()
+            self._track_league()
 
             cap_remaining, cutoff_remaining, session_remaining = self._limits()
             effective = self._effective_from(cap_remaining, cutoff_remaining, session_remaining)
             self._maybe_fire_warnings(effective)
             if effective <= self.config.grace_seconds:
+                # Don't cut off a game in progress — hold until it ends + buffer.
+                if self._deferred_for_game():
+                    if not self._shutdown_held:
+                        self._shutdown_held = True
+                        self._log("shutdown_held", reason="game")
+                    return
+                self._shutdown_held = False
                 self._grace_requested = True
                 self._log_shutdown(cap_remaining, cutoff_remaining, session_remaining)
                 self._request_grace()
+            else:
+                self._shutdown_held = False
 
     # ───────── read-only snapshot for the HUD / settings / tray ─────────
     def get_status(self) -> dict:
@@ -200,6 +239,7 @@ class Api:
             "session_remaining_seconds": session_remaining,
             "session_remaining_hm": _fmt_hm(session_remaining) if session_remaining is not None else None,
             "session_active": session_remaining is not None,
+            "shutdown_held": self._shutdown_held,
             "used_seconds": used_seconds,
             "used_hm": _fmt_hm(used_seconds),
             "used_pct": used_pct,

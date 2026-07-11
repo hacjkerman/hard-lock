@@ -65,6 +65,7 @@ def main(argv: "list[str] | None" = None) -> int:
 
     import webview
 
+    from . import league
     from .api import Api
     from .history import DayHistory, EventLog
     from .tracker import ActiveTimeTracker
@@ -273,6 +274,7 @@ def main(argv: "list[str] | None" = None) -> int:
         open_history=open_history,
         hide_hud=hide_hud,
         open_session_prompt=open_session_prompt,
+        league_active=league.is_game_active,
         event_log=event_log,
         day_history=day_history,
     )

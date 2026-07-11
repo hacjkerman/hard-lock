@@ -73,6 +73,11 @@ html, body {
   border: 1px solid var(--border);
   border-radius: 8px;
 }
+.no-time {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
 .picker-value {
   display: flex;
   align-items: baseline;

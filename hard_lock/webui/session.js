@@ -75,6 +75,13 @@ async function init() {
     } else {
       $("floor-text").textContent = `At most ${fmtLabel(maxMinutes)} before your daily cap.`;
     }
+
+    // Too little time to set a meaningful timer (at/near/past a limit). A slider
+    // pinned to 1 min with every preset disabled just looks broken — say why.
+    if (maxMinutes < 5) {
+      showNoTimeState(info);
+      return;
+    }
   } catch (err) {
     console.error("prompt info failed", err);
   }
@@ -87,6 +94,24 @@ async function init() {
 
   renderPresets();
   setMinutes(Math.min(30, maxMinutes));
+}
+
+function showNoTimeState(info) {
+  const pastCutoff = info.hard_cutoff_time && info.cutoff_remaining_hm === "0h 00m";
+  const msg = pastCutoff
+    ? `You're past your hard cutoff (${info.hard_cutoff_time}). A timer only ever shortens your remaining time — it can't push the cutoff later — so there's nothing to set here.`
+    : `Under 5 minutes left before your limit. A timer only shortens your remaining time, it can't extend it — so there's nothing to set.`;
+  $("prompt-title").textContent = pastCutoff ? "Past your cutoff" : "Almost out of time";
+  const picker = document.querySelector(".picker");
+  if (picker) picker.innerHTML = `<div class="no-time"></div>`;
+  const nt = document.querySelector(".no-time");
+  if (nt) nt.textContent = msg;
+  const floor = $("floor-note");
+  if (floor) floor.style.display = "none";
+  const start = $("start");
+  start.disabled = true;
+  start.textContent = "Nothing to start";
+  $("skip").textContent = "Close";
 }
 
 function wire() {

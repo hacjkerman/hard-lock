@@ -2,6 +2,7 @@ function $(id) { return document.getElementById(id); }
 
 let dayKeys = [];  // ["mon", … "sun"], from get_settings
 const armedActivate = new Set();  // pending keys one click into "Activate now"
+const lastSet = {};  // input id → value we last set programmatically (detects user edits)
 const DAY_LABEL = { mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu", fri: "Fri", sat: "Sat", sun: "Sun" };
 
 function fieldLabel(key) {
@@ -105,8 +106,39 @@ function buildPerDay(settings) {
     const capQ = capK in pend, cutQ = cutK in pend;
     $(capK).value = capQ ? pend[capK] : settings.cap_by_day[i];
     $(cutK).value = (cutQ ? pend[cutK] : settings.cutoff_by_day[i]) || "";
+    lastSet[capK] = $(capK).value;
+    lastSet[cutK] = $(cutK).value;
     if (capQ) markQueued($(capK));
     if (cutQ) markQueued($(cutK));
+  });
+}
+
+// Keep the per-day cells current without a manual Reload — but never touch a
+// cell the user is editing (focused) or has changed but not yet applied.
+function applyCell(id, target, queued) {
+  const el = $(id);
+  if (!el) return;
+  target = String(target);
+  if (document.activeElement === el) return;            // editing right now
+  const known = lastSet[id];
+  if (known !== undefined && el.value !== known) return; // user-edited, not applied
+  if (el.value !== target) {
+    el.value = target;
+    lastSet[id] = target;
+  }
+  el.classList.toggle("queued", queued);
+  if (queued) el.title = "Queued — activates after your cooldown (see Pending changes).";
+  else el.removeAttribute("title");
+}
+
+function refreshPerDay(settings) {
+  if (!dayKeys.length) return;
+  const pend = {};
+  for (const p of settings.pending || []) pend[p.key] = p.value;
+  dayKeys.forEach((k, i) => {
+    const capK = `cap_${k}`, cutK = `cutoff_${k}`;
+    applyCell(capK, capK in pend ? pend[capK] : settings.cap_by_day[i], capK in pend);
+    applyCell(cutK, (cutK in pend ? pend[cutK] : settings.cutoff_by_day[i]) || "", cutK in pend);
   });
 }
 
@@ -279,6 +311,7 @@ window.addEventListener("pywebviewready", () => {
     // Keep pending countdowns and today-progress fresh without stomping edits.
     window.pywebview.api.get_settings().then((s) => {
       renderPending(s.pending);
+      refreshPerDay(s);
     });
     window.pywebview.api.get_status().then((s) => {
       $("today-fill").style.width = `${s.used_pct}%`;

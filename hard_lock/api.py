@@ -31,7 +31,8 @@ class Api:
     def __init__(self, config, state, tracker, request_grace, open_settings,
                  open_hud=None, session_deadline: "dt.datetime | None" = None,
                  event_log=None, day_history=None, open_history=None, hide_hud=None,
-                 open_session_prompt=None, league_active=None, on_game_change=None):
+                 open_session_prompt=None, league_active=None, on_game_change=None,
+                 re_arm=None):
         self.config = config
         self.state = state
         self.tracker = tracker
@@ -44,6 +45,8 @@ class Api:
         # Called with True when a defer-for game starts holding, False when it
         # releases — the app uses it to auto-hide the HUD during a game.
         self._on_game_change = on_game_change
+        # Re-arm from the dormant (disarmed) state: relaunch enforcing.
+        self._re_arm = re_arm
         self._event_log = event_log
         self._day_history = day_history
         # Wall-clock deadline for the session timer, or None. A manual (on-demand)
@@ -318,6 +321,12 @@ class Api:
             "session_active": session_remaining is not None,
             "shutdown_held": self._shutdown_held,
             "dry_run_fired": self._dry_run_fired,
+            "disarmed": self.config.disarm_due(),
+            "disarm_pending": self.config.disarm_at is not None and not self.config.disarm_due(),
+            "disarm_remaining_hm": (
+                _fmt_hm(self.config.disarm_remaining_seconds())
+                if self.config.disarm_at is not None and not self.config.disarm_due() else None
+            ),
             "used_seconds": used_seconds,
             "used_hm": _fmt_hm(used_seconds),
             "used_pct": used_pct,
@@ -399,6 +408,26 @@ class Api:
         if ok:
             self._log("pending_activated", key=key)
         return {"ok": ok, "pending": self._pending_view()}
+
+    # ───────── disarm (the sanctioned, cooldown-gated stop) ─────────
+    def request_disarm(self) -> dict:
+        at = self.config.request_disarm()
+        self._log("disarm_requested", effective_at=at)
+        return {"ok": True, "disarm_at": at,
+                "disarm_remaining_hm": _fmt_hm(self.config.disarm_remaining_seconds() or 0)}
+
+    def cancel_disarm(self) -> dict:
+        self.config.cancel_disarm()
+        self._log("disarm_cancelled")
+        return {"ok": True}
+
+    def re_arm(self) -> dict:
+        """Leave the dormant state and start enforcing again."""
+        self.config.cancel_disarm()
+        self._log("re_armed")
+        if self._re_arm:
+            self._re_arm()
+        return {"ok": True}
 
     def open_settings(self) -> None:
         self._open_settings()

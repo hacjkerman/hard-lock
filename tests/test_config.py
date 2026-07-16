@@ -277,6 +277,29 @@ class ConfigTestCase(unittest.TestCase):
         self.assertNotIn("not_a_setting", cfg._data)  # unknown keys ignored
         self.assertTrue(json.loads(self.path.read_text())["setup_completed"])
 
+    # ───────── disarm (cooldown-gated stop) ─────────
+    def test_request_disarm_is_cooldown_gated(self):
+        cfg = self._cfg(edit_cooldown_hours=24)
+        self.assertIsNone(cfg.disarm_at)
+        self.assertFalse(cfg.disarm_due())
+        cfg.request_disarm()
+        self.assertIsNotNone(cfg.disarm_at)
+        self.assertFalse(cfg.disarm_due())  # 24h out — still armed
+        self.assertGreater(cfg.disarm_remaining_seconds(), 23 * 3600)
+
+    def test_cancel_disarm(self):
+        cfg = self._cfg()
+        cfg.request_disarm()
+        cfg.cancel_disarm()
+        self.assertIsNone(cfg.disarm_at)
+        self.assertFalse(cfg.disarm_due())
+        self.assertIsNone(cfg.disarm_remaining_seconds())
+
+    def test_disarm_due_when_matured(self):
+        cfg = self._cfg()
+        cfg._data["disarm_at"] = (dt.datetime.now() - dt.timedelta(minutes=1)).isoformat()
+        self.assertTrue(cfg.disarm_due())
+
     # ───────── traffic-light + cutoff math ─────────
     def test_state_for_thresholds(self):
         cfg = self._cfg()

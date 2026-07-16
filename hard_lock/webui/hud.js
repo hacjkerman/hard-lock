@@ -37,6 +37,14 @@ function render(status) {
   $("timer-btn-label").textContent = status.session_active ? "Change work timer" : "Set a work timer";
 
   $("held-note").classList.toggle("hidden", !status.shutdown_held);
+
+  const disarmNote = $("disarm-note");
+  disarmNote.classList.toggle("hidden", !status.disarm_pending);
+  if (status.disarm_pending) {
+    $("disarm-note-text").textContent =
+      `Disarming in ${status.disarm_remaining_hm} — the lock still holds until then.`;
+  }
+  $("disarmed-note").classList.toggle("hidden", !status.disarmed);
   const dn = $("dry-run-note");
   dn.classList.toggle("hidden", !status.dry_run);
   dn.textContent = status.dry_run_fired
@@ -87,6 +95,13 @@ function wire() {
   });
   $("open-timer").addEventListener("click", () => {
     window.pywebview.api.open_session_prompt();
+  });
+  $("disarm-cancel").addEventListener("click", async () => {
+    await window.pywebview.api.cancel_disarm();
+    poll();
+  });
+  $("re-arm").addEventListener("click", async () => {
+    await window.pywebview.api.re_arm();
   });
   $("toggle-dry-run").addEventListener("click", async () => {
     const settings = await window.pywebview.api.get_settings();

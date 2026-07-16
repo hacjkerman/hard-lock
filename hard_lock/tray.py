@@ -42,7 +42,7 @@ def make_image(size=64):
     return img
 
 
-def build_icon(api, on_show_hud, on_settings, on_history, on_quit):
+def build_icon(api, on_show_hud, on_settings, on_history, on_disarm):
     """Construct the pystray Icon (does not start it). Returns None if pystray
     is unavailable."""
     try:
@@ -58,6 +58,16 @@ def build_icon(api, on_show_hud, on_settings, on_history, on_quit):
         except Exception:
             return "Hard Lock"
 
+    def disarm_label(_item):
+        # Reflect a pending disarm so it's clear it's counting down, not instant.
+        try:
+            s = api.get_status()
+            if s.get("disarm_pending"):
+                return f"Disarming in {s.get('disarm_remaining_hm', '')}…"
+        except Exception:
+            pass
+        return "Disarm (waits out cooldown)"
+
     def wrap(fn):
         # pystray invokes callbacks as (icon, item); our callbacks take no args.
         def handler(_icon, _item):
@@ -67,6 +77,8 @@ def build_icon(api, on_show_hud, on_settings, on_history, on_quit):
                 pass
         return handler
 
+    # No one-click quit: the only way to stop the lock is a cooldown-gated
+    # disarm, so tired-you can't just close it.
     menu = pystray.Menu(
         pystray.MenuItem(status_text, None, enabled=False),
         pystray.Menu.SEPARATOR,
@@ -74,15 +86,15 @@ def build_icon(api, on_show_hud, on_settings, on_history, on_quit):
         pystray.MenuItem("Open settings", wrap(on_settings)),
         pystray.MenuItem("View history", wrap(on_history)),
         pystray.Menu.SEPARATOR,
-        pystray.MenuItem("Quit Hard Lock", wrap(on_quit)),
+        pystray.MenuItem(disarm_label, wrap(on_disarm)),
     )
     return pystray.Icon("hardlock", make_image(), "Hard Lock", menu)
 
 
-def start_tray(api, on_show_hud, on_settings, on_history, on_quit):
+def start_tray(api, on_show_hud, on_settings, on_history, on_disarm):
     """Build and run the tray on a daemon thread. Returns the icon, or None if
     the tray couldn't be created."""
-    icon = build_icon(api, on_show_hud, on_settings, on_history, on_quit)
+    icon = build_icon(api, on_show_hud, on_settings, on_history, on_disarm)
     if icon is None:
         return None
     threading.Thread(target=icon.run, name="hardlock-tray", daemon=True).start()

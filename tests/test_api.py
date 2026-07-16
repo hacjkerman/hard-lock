@@ -326,6 +326,30 @@ class ApiStatusTestCase(unittest.TestCase):
         api.tick()  # released → False
         self.assertEqual(calls, [True, False])
 
+    def test_request_disarm_is_pending_not_disarmed(self):
+        api, _, _ = make({"edit_cooldown_hours": 24})
+        api.request_disarm()
+        s = api.get_status()
+        self.assertTrue(s["disarm_pending"])
+        self.assertFalse(s["disarmed"])
+        self.assertIsNotNone(s["disarm_remaining_hm"])
+
+    def test_matured_disarm_shows_disarmed(self):
+        api, config, _ = make()
+        config._data["disarm_at"] = (dt.datetime.now() - dt.timedelta(minutes=1)).isoformat()
+        s = api.get_status()
+        self.assertTrue(s["disarmed"])
+        self.assertFalse(s["disarm_pending"])
+
+    def test_re_arm_clears_disarm_and_relaunches(self):
+        called = []
+        api, config, _ = make()
+        api._re_arm = lambda: called.append(1)
+        api.request_disarm()
+        api.re_arm()
+        self.assertIsNone(config.disarm_at)
+        self.assertEqual(called, [1])
+
     def test_tracker_accumulates_into_state(self):
         api, _, state = make(tracker_delta=5.0)
         api.tick()

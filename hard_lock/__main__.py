@@ -60,10 +60,15 @@ def main(argv: "list[str] | None" = None) -> int:
         return 1
 
     argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] == "--watchdog":
+        from . import guardian
+        return guardian.run_watchdog()
     if argv:
         return _run_cli(argv)
 
     import webview
+
+    from . import guardian
 
     from . import league
     from .api import Api
@@ -296,6 +301,12 @@ def main(argv: "list[str] | None" = None) -> int:
         prompt_window_ref[0] = win
         _attach_prompt_guard(win)
 
+    def re_arm() -> None:
+        # Leave the dormant (disarmed) state: relaunch a fresh armed instance,
+        # then tear this dormant one down.
+        guardian.spawn("main")
+        _teardown_windows()
+
     api = Api(
         config=config,
         state=state,
@@ -308,14 +319,19 @@ def main(argv: "list[str] | None" = None) -> int:
         open_session_prompt=open_session_prompt,
         league_active=league.is_game_active,
         on_game_change=on_game_change,
+        re_arm=re_arm,
         event_log=event_log,
         day_history=day_history,
     )
 
-    # The clock runs on its own thread, independent of any window, so active
-    # time keeps accruing even while the HUD is hidden to the tray or the
-    # late-night prompt is up. get_status is now a read-only snapshot.
+    # If a disarm has matured, run DORMANT: no enforcement, no watchdog — just a
+    # HUD offering to re-arm. Otherwise run ARMED, as a single instance, with the
+    # watchdog keeping us alive.
+    dormant = config.disarm_due()
     tick_stop = threading.Event()
+
+    if not dormant and guardian.acquire_singleton(r"Local\HardLockMain") is None:
+        return 0  # another armed instance already owns the lock
 
     def tick_loop() -> None:
         while not tick_stop.wait(1.0):
@@ -324,29 +340,48 @@ def main(argv: "list[str] | None" = None) -> int:
             except Exception:
                 pass
 
-    ticker = threading.Thread(target=tick_loop, name="hardlock-ticker", daemon=True)
-    ticker.start()
+    def guardian_loop() -> None:
+        # Heartbeat + resurrect the watchdog; stop everything once a disarm matures.
+        while not tick_stop.wait(guardian.HEARTBEAT_INTERVAL):
+            guardian.write_heartbeat("main")
+            if config.disarm_due():
+                try:
+                    event_log.append("disarmed")
+                except Exception:
+                    pass
+                _teardown_windows()  # ends the webview loop → this process exits
+                return
+            if not guardian.is_alive("watchdog"):
+                guardian.spawn("watchdog")
 
-    # System tray: keeps the app alive in the background when the HUD is closed.
-    # Optional — if pystray/Pillow aren't available it simply doesn't appear.
-    def quit_app() -> None:
-        tick_stop.set()
-        _teardown_windows()  # sets force_close, destroys windows, stops tray
+    if not dormant:
+        guardian.write_heartbeat("main")
+        threading.Thread(target=tick_loop, name="hardlock-ticker", daemon=True).start()
+        guardian.spawn("watchdog")
+        threading.Thread(target=guardian_loop, name="hardlock-guardian", daemon=True).start()
+
+    # System tray. The only stop is a cooldown-gated disarm — no one-click quit.
+    def request_disarm_from_tray() -> None:
+        try:
+            api.request_disarm()
+        except Exception:
+            pass
 
     tray_ref[0] = tray.start_tray(
         api,
         on_show_hud=open_hud,
         on_settings=open_settings,
         on_history=open_history,
-        on_quit=quit_app,
+        on_disarm=request_disarm_from_tray,
     )
 
-    # First launch → onboarding wizard. Else after the late-night hour → the
-    # (bounded) session-timer prompt — but only if there's actually time left to
-    # commit; past the cutoff/cap it would be a dead "nothing to set" screen, so
-    # skip straight to the HUD. Otherwise straight to the HUD. Each front window
-    # hands off to the HUD (open_hud destroys it) and hides-to-tray on close.
-    if not config.setup_completed:
+    # Dormant → the HUD shows the disarmed / re-arm state. Otherwise: first launch
+    # → onboarding; else after the late-night hour → the (bounded) session prompt,
+    # but only if there's time to commit (past the cutoff it would be a dead
+    # screen, so skip to the HUD); otherwise straight to the HUD.
+    if dormant:
+        open_hud()
+    elif not config.setup_completed:
         win = webview.create_window(
             "Hard Lock — Setup",
             url=str(WEBUI_DIR / "onboarding.html"),
@@ -365,8 +400,9 @@ def main(argv: "list[str] | None" = None) -> int:
 
     webview.start(debug=False)
 
-    # Webview loop returned — stop the ticker and tray during shutdown.
+    # Webview loop returned — stop the ticker/guardian and tray during shutdown.
     tick_stop.set()
+    guardian.clear_heartbeat("main")
     if tray_ref[0] is not None:
         try:
             tray_ref[0].stop()

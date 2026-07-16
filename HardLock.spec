@@ -5,7 +5,9 @@ from PyInstaller.utils.hooks import collect_all
 
 datas = [("hard_lock/webui", "hard_lock/webui")]
 binaries = []
-hiddenimports = []
+# guardian is spawned as a separate --watchdog process and imported lazily; pin
+# it so the frozen build always includes it.
+hiddenimports = ["hard_lock.guardian"]
 
 # pywebview pulls in its platform backends dynamically; pystray likewise loads a
 # platform backend by name. collect_all so the frozen build finds them at runtime.

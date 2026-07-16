@@ -18,11 +18,12 @@ class TrayTestCase(unittest.TestCase):
             FakeApi(), lambda: None, lambda: None, lambda: None, lambda: None
         )
         self.assertIsNotNone(icon)
-        # status line + 3 actions + quit (plus separators)
+        # status line + 3 actions + disarm (plus separators). No one-click quit.
         items = list(icon.menu)
         labels = [str(i.text) for i in items if getattr(i, "text", None)]
         self.assertTrue(any("Show HUD" in x for x in labels))
-        self.assertTrue(any("Quit" in x for x in labels))
+        self.assertTrue(any("Disarm" in x for x in labels))
+        self.assertFalse(any("Quit" in x for x in labels))
 
     def test_menu_actions_wired(self):
         calls = []
@@ -31,7 +32,7 @@ class TrayTestCase(unittest.TestCase):
             lambda: calls.append("hud"),
             lambda: calls.append("settings"),
             lambda: calls.append("history"),
-            lambda: calls.append("quit"),
+            lambda: calls.append("disarm"),
         )
         by_text = {}
         for item in icon.menu:
@@ -40,8 +41,9 @@ class TrayTestCase(unittest.TestCase):
                 by_text[str(text)] = item
         # invoking a menu item runs its action (pystray's MenuItem.__call__(icon))
         by_text["Show HUD"](icon)
-        by_text["Quit Hard Lock"](icon)
-        self.assertEqual(calls, ["hud", "quit"])
+        disarm_item = next(i for k, i in by_text.items() if "Disarm" in k)
+        disarm_item(icon)
+        self.assertEqual(calls, ["hud", "disarm"])
 
 
 if __name__ == "__main__":

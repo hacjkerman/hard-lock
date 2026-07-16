@@ -24,6 +24,9 @@ DEFAULTS = {
     "game_defer_grace_seconds": 180,
     "dry_run": True,
     "setup_completed": False,
+    # When set (ISO timestamp), a disarm has been requested; once now passes it,
+    # the app + watchdog stop and stop resurrecting. The only sanctioned way out.
+    "disarm_at": None,
     "pending_changes": {},
 }
 
@@ -391,6 +394,44 @@ class Config:
             self._data["pending_changes"] = pending
             self.save()
         return applied, deferred
+
+    # ───────── disarm: the one sanctioned stop (cooldown-gated) ─────────
+    @property
+    def disarm_at(self):
+        return self._data.get("disarm_at")
+
+    def request_disarm(self) -> str:
+        """Schedule a disarm for edit_cooldown_hours from now. Until then the lock
+        keeps running (and resurrecting); once due, everything stops."""
+        with self._lock:
+            at = (dt.datetime.now() + dt.timedelta(hours=self.edit_cooldown_hours)).isoformat()
+            self._data["disarm_at"] = at
+            self.save()
+        return at
+
+    def cancel_disarm(self) -> None:
+        """Cancel a pending disarm, or re-arm after one matured."""
+        with self._lock:
+            self._data["disarm_at"] = None
+            self.save()
+
+    def disarm_due(self, now: "dt.datetime | None" = None) -> bool:
+        at = self._data.get("disarm_at")
+        if not at:
+            return False
+        try:
+            return (now or dt.datetime.now()) >= dt.datetime.fromisoformat(at)
+        except (TypeError, ValueError):
+            return False
+
+    def disarm_remaining_seconds(self, now: "dt.datetime | None" = None):
+        at = self._data.get("disarm_at")
+        if not at:
+            return None
+        try:
+            return max(0.0, (dt.datetime.fromisoformat(at) - (now or dt.datetime.now())).total_seconds())
+        except (TypeError, ValueError):
+            return None
 
     def cancel_pending(self, key: str) -> bool:
         with self._lock:

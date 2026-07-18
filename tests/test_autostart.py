@@ -31,12 +31,16 @@ class SchtasksTestCase(unittest.TestCase):
              mock.patch.object(autostart, "launch_command", return_value='"X"'):
             ok, msg = autostart.install()
         self.assertTrue(ok)
-        args = st.call_args[0]
-        self.assertIn("/create", args)
-        self.assertIn("/sc", args)
-        self.assertIn("ONLOGON", args)
-        self.assertIn("/f", args)
-        self.assertIn(autostart.TASK_NAME, args)
+        logon_args = st.call_args_list[0][0]  # first call = the logon task
+        self.assertIn("/create", logon_args)
+        self.assertIn("/sc", logon_args)
+        self.assertIn("ONLOGON", logon_args)
+        self.assertIn("/f", logon_args)
+        self.assertIn(autostart.TASK_NAME, logon_args)
+        # second call = the every-minute heartbeat backstop
+        hb_args = st.call_args_list[1][0]
+        self.assertIn("MINUTE", hb_args)
+        self.assertIn(autostart.HEARTBEAT_TASK, hb_args)
 
     def test_install_access_denied_hints_elevation(self):
         with mock.patch.object(autostart, "_schtasks", return_value=_cp(1, stderr="ERROR: Access is denied.")):

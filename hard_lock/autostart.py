@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 
 TASK_NAME = "HardLock"
+HEARTBEAT_TASK = "HardLockHeartbeat"
 
 
 def launch_command() -> str:
@@ -46,27 +47,45 @@ def _schtasks(*args: str) -> subprocess.CompletedProcess:
 
 
 def install() -> tuple[bool, str]:
-    """Create/replace the logon task. Returns (ok, message)."""
-    res = _schtasks(
+    """Create/replace the logon task AND the every-minute heartbeat task (a
+    backstop that relaunches the app within ≤1 min if both processes were killed
+    together, closing the watchdog's 'kill both at once' gap). Returns
+    (ok, message)."""
+    logon = _schtasks(
         "/create",
         "/tn", TASK_NAME,
         "/sc", "ONLOGON",
         "/tr", launch_command(),
         "/f",
     )
-    if res.returncode == 0:
-        return True, f'Installed logon task "{TASK_NAME}".'
-    err = (res.stderr or res.stdout).strip()
-    hint = ""
-    if "denied" in err.lower() or "access" in err.lower():
-        hint = " (try running this once from an elevated/admin console)"
-    return False, f"Could not install task: {err}{hint}"
+    if logon.returncode != 0:
+        err = (logon.stderr or logon.stdout).strip()
+        hint = ""
+        if "denied" in err.lower() or "access" in err.lower():
+            hint = " (try running this once from an elevated/admin console)"
+        return False, f"Could not install task: {err}{hint}"
+
+    # Heartbeat: run `--ensure` every minute; it relaunches the app only if it's
+    # gone and no disarm is due. Best-effort — a logon task alone is still useful.
+    heartbeat = _schtasks(
+        "/create",
+        "/tn", HEARTBEAT_TASK,
+        "/sc", "MINUTE",
+        "/mo", "1",
+        "/tr", f"{launch_command()} --ensure",
+        "/f",
+    )
+    if heartbeat.returncode == 0:
+        return True, f'Installed logon + heartbeat tasks ("{TASK_NAME}", "{HEARTBEAT_TASK}").'
+    return True, (f'Installed logon task "{TASK_NAME}"; heartbeat task failed: '
+                  + (heartbeat.stderr or heartbeat.stdout).strip())
 
 
 def uninstall() -> tuple[bool, str]:
     res = _schtasks("/delete", "/tn", TASK_NAME, "/f")
+    _schtasks("/delete", "/tn", HEARTBEAT_TASK, "/f")  # best-effort
     if res.returncode == 0:
-        return True, f'Removed logon task "{TASK_NAME}".'
+        return True, f'Removed logon + heartbeat tasks.'
     err = (res.stderr or res.stdout).strip()
     if "cannot find" in err.lower() or "does not exist" in err.lower():
         return True, "No logon task was installed."

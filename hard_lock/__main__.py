@@ -63,6 +63,13 @@ def main(argv: "list[str] | None" = None) -> int:
     if argv and argv[0] == "--watchdog":
         from . import guardian
         return guardian.run_watchdog()
+    if argv and argv[0] == "--ensure":
+        # Scheduled-task backstop: relaunch the main app if it isn't running and
+        # no disarm is due. Cheap — no UI, returns immediately.
+        from . import guardian
+        if not guardian.is_alive("main") and not guardian.disarm_due():
+            guardian.spawn("main")
+        return 0
     if argv:
         return _run_cli(argv)
 
@@ -142,7 +149,7 @@ def main(argv: "list[str] | None" = None) -> int:
                 hud_window_ref[0] = None
         win = webview.create_window(
             "Hard Lock",
-            url=str(WEBUI_DIR / "hud.html"),
+            url=(WEBUI_DIR / "hud.html").as_uri(),
             js_api=api,
             width=300,
             height=420,
@@ -219,7 +226,7 @@ def main(argv: "list[str] | None" = None) -> int:
                 settings_window_ref[0] = None
         win = webview.create_window(
             "Hard Lock — Settings",
-            url=str(WEBUI_DIR / "settings.html"),
+            url=(WEBUI_DIR / "settings.html").as_uri(),
             js_api=api,
             width=1040,
             height=640,
@@ -237,7 +244,7 @@ def main(argv: "list[str] | None" = None) -> int:
                 history_window_ref[0] = None
         win = webview.create_window(
             "Hard Lock — History",
-            url=str(WEBUI_DIR / "history.html"),
+            url=(WEBUI_DIR / "history.html").as_uri(),
             js_api=api,
             width=900,
             height=640,
@@ -287,7 +294,7 @@ def main(argv: "list[str] | None" = None) -> int:
         prompt_closing[0] = False  # fresh prompt: its close hides, not exits
         win = webview.create_window(
             "Hard Lock — Set timer",
-            url=str(WEBUI_DIR / "session.html"),
+            url=(WEBUI_DIR / "session.html").as_uri(),
             js_api=api,
             width=460,
             height=540,
@@ -384,7 +391,7 @@ def main(argv: "list[str] | None" = None) -> int:
     elif not config.setup_completed:
         win = webview.create_window(
             "Hard Lock — Setup",
-            url=str(WEBUI_DIR / "onboarding.html"),
+            url=(WEBUI_DIR / "onboarding.html").as_uri(),
             js_api=api,
             width=760,
             height=560,

@@ -13,11 +13,16 @@ WEBUI_DIR = paths.webui_dir()
 USAGE = """Hard Lock - a self-imposed Windows shutdown lock.
 
 Usage:
-  HardLock                  Launch the app (HUD; late-night prompt after the hour).
-  HardLock --install        Install the logon task so it starts automatically.
-  HardLock --uninstall      Remove the logon task.
-  HardLock --status         Show whether autostart is installed.
-  HardLock --help           Show this help.
+  HardLock                        Launch the app (HUD; late-night prompt after the hour).
+  HardLock --install              Install the logon + heartbeat tasks.
+  HardLock --uninstall            Remove the logon + heartbeat tasks.
+  HardLock --status               Show whether autostart is installed.
+  HardLock --test-shutdown [s] [real]
+                                  Show the grace countdown then shut down per the
+                                  current mode. A number sets the grace seconds;
+                                  'real' forces an actual power-off even in dry-run.
+                                  Changes no config (no boot-loop risk).
+  HardLock --help                 Show this help.
 """
 
 
@@ -32,6 +37,42 @@ def _emit(msg: str) -> None:
             ctypes.windll.user32.MessageBoxW(0, msg, "Hard Lock", 0x40)
         except Exception:
             pass
+
+
+def _parse_test_args(rest, default_grace: int, config_dry_run: bool):
+    """(grace_seconds, dry_run) for `--test-shutdown [seconds] [real]`. A bare
+    number overrides the grace length; 'real' forces an actual power-off even in
+    dry-run. Never mutates config — so a test can't cause a boot loop."""
+    grace = default_grace
+    force_real = False
+    for a in rest:
+        if str(a).lower() == "real":
+            force_real = True
+        else:
+            try:
+                grace = max(1, int(a))
+            except (ValueError, TypeError):
+                pass
+    return grace, (config_dry_run and not force_real)
+
+
+def _run_test_shutdown(rest: "list[str]") -> int:
+    """On-demand shutdown test: show the grace countdown, then shut down per the
+    current mode (dry-run simulates; armed powers off for real). Sets NO limit
+    and writes NO trigger to config, so there's nothing to revert and no risk of
+    the machine shutting down again on the next boot."""
+    from .config import Config
+    from .history import EventLog
+    from .ui import GraceCountdown
+
+    config = Config.load(CONFIG_PATH)
+    grace, dry = _parse_test_args(rest, config.grace_seconds, config.dry_run)
+    try:
+        EventLog(paths.events_path()).append("shutdown_test", dry_run=dry, grace_seconds=grace)
+    except Exception:
+        pass
+    GraceCountdown(grace, dry).run()  # blocks: countdown → initiate_shutdown(dry)
+    return 0
 
 
 def _run_cli(argv: "list[str]") -> int:
@@ -70,6 +111,8 @@ def main(argv: "list[str] | None" = None) -> int:
         if not guardian.is_alive("main") and not guardian.disarm_due():
             guardian.spawn("main")
         return 0
+    if argv and argv[0] == "--test-shutdown":
+        return _run_test_shutdown(argv[1:])
     if argv:
         return _run_cli(argv)
 

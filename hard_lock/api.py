@@ -634,6 +634,10 @@ class Api:
         elif t == "session_timer":
             label = f"Late-night timer · {e.get('minutes')} min"
             tone = "neutral"
+        elif t == "shutdown_test":
+            kind = "simulated" if e.get("dry_run") else "REAL"
+            label = f"Shutdown test · {kind} ({e.get('grace_seconds')}s grace)"
+            tone = "amber"
         elif t == "day_rollover":
             label = f"Day archived · {_fmt_hm(e.get('active_seconds', 0))} active"
             tone = "red" if e.get("hit_cap") else "green"

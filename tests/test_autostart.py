@@ -113,5 +113,34 @@ class CliTestCase(unittest.TestCase):
             self.assertEqual(_run_cli(["--install"]), 1)
 
 
+class TestShutdownArgsTestCase(unittest.TestCase):
+    def test_defaults_to_config_mode_and_grace(self):
+        from hard_lock.__main__ import _parse_test_args
+        # dry-run config → simulated; grace falls back to the default
+        self.assertEqual(_parse_test_args([], 60, True), (60, True))
+        self.assertEqual(_parse_test_args([], 60, False), (60, False))
+
+    def test_seconds_override(self):
+        from hard_lock.__main__ import _parse_test_args
+        self.assertEqual(_parse_test_args(["10"], 60, False), (10, False))
+        # junk is ignored, keeps the default
+        self.assertEqual(_parse_test_args(["abc"], 60, False), (60, False))
+        # never below 1
+        self.assertEqual(_parse_test_args(["0"], 60, False), (1, False))
+
+    def test_real_forces_actual_shutdown_even_in_dry_run(self):
+        from hard_lock.__main__ import _parse_test_args
+        grace, dry = _parse_test_args(["real"], 60, True)
+        self.assertFalse(dry)  # forced real despite dry-run config
+        grace, dry = _parse_test_args(["5", "real"], 60, True)
+        self.assertEqual((grace, dry), (5, False))
+
+    def test_main_routes_test_shutdown(self):
+        from hard_lock import __main__ as m
+        with mock.patch.object(m, "_run_test_shutdown", return_value=0) as run:
+            self.assertEqual(m.main(["--test-shutdown", "5", "real"]), 0)
+        run.assert_called_once_with(["5", "real"])
+
+
 if __name__ == "__main__":
     unittest.main()

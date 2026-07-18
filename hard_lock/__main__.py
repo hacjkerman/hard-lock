@@ -60,15 +60,25 @@ def _run_test_shutdown(rest: "list[str]") -> int:
     """On-demand shutdown test: show the grace countdown, then shut down per the
     current mode (dry-run simulates; armed powers off for real). Sets NO limit
     and writes NO trigger to config, so there's nothing to revert and no risk of
-    the machine shutting down again on the next boot."""
+    the machine shutting down again on the next boot. Holds during a game, just
+    like the real limit — a test must never power off mid-match either."""
     from .config import Config
     from .history import EventLog
     from .ui import GraceCountdown
+    from . import league
 
     config = Config.load(CONFIG_PATH)
     grace, dry = _parse_test_args(rest, config.grace_seconds, config.dry_run)
+    log = EventLog(paths.events_path())
+    if config.defer_for_games and league.is_game_active(config.defer_for_games):
+        try:
+            log.append("shutdown_test", held="game", dry_run=dry)
+        except Exception:
+            pass
+        print("A defer-for game is running — Hard Lock holds the shutdown; test skipped.")
+        return 0
     try:
-        EventLog(paths.events_path()).append("shutdown_test", dry_run=dry, grace_seconds=grace)
+        log.append("shutdown_test", dry_run=dry, grace_seconds=grace)
     except Exception:
         pass
     GraceCountdown(grace, dry).run()  # blocks: countdown → initiate_shutdown(dry)

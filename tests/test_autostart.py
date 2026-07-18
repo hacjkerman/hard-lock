@@ -141,6 +141,30 @@ class TestShutdownArgsTestCase(unittest.TestCase):
             self.assertEqual(m.main(["--test-shutdown", "5", "real"]), 0)
         run.assert_called_once_with(["5", "real"])
 
+    def test_test_shutdown_holds_during_a_game(self):
+        # Even a deliberate test must not power off mid-match — it holds and
+        # never reaches the grace countdown.
+        from hard_lock import __main__ as m
+        cfg = mock.Mock(grace_seconds=60, dry_run=False, defer_for_games=["League of Legends.exe"])
+        with mock.patch("hard_lock.config.Config.load", return_value=cfg), \
+             mock.patch("hard_lock.league.is_game_active", return_value=True), \
+             mock.patch("hard_lock.history.EventLog"), \
+             mock.patch("hard_lock.ui.GraceCountdown") as grace:
+            rc = m._run_test_shutdown([])
+        self.assertEqual(rc, 0)
+        grace.assert_not_called()  # never counted down → never shut down
+
+    def test_test_shutdown_proceeds_without_a_game(self):
+        from hard_lock import __main__ as m
+        cfg = mock.Mock(grace_seconds=1, dry_run=True, defer_for_games=["League of Legends.exe"])
+        with mock.patch("hard_lock.config.Config.load", return_value=cfg), \
+             mock.patch("hard_lock.league.is_game_active", return_value=False), \
+             mock.patch("hard_lock.history.EventLog"), \
+             mock.patch("hard_lock.ui.GraceCountdown") as grace:
+            rc = m._run_test_shutdown([])
+        self.assertEqual(rc, 0)
+        grace.assert_called_once()  # ran the countdown (dry-run → simulated)
+
 
 if __name__ == "__main__":
     unittest.main()

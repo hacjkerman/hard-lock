@@ -128,7 +128,7 @@ def main(argv: "list[str] | None" = None) -> int:
 
     import webview
 
-    from . import guardian
+    from . import build, guardian
 
     from . import league
     from .api import Api
@@ -390,7 +390,7 @@ def main(argv: "list[str] | None" = None) -> int:
     dormant = config.disarm_due()
     tick_stop = threading.Event()
 
-    if not dormant and guardian.acquire_singleton(r"Local\HardLockMain") is None:
+    if not build.DEV_BUILD and not dormant and guardian.acquire_singleton(r"Local\HardLockMain") is None:
         return 0  # another armed instance already owns the lock
 
     def tick_loop() -> None:
@@ -415,15 +415,22 @@ def main(argv: "list[str] | None" = None) -> int:
                 guardian.spawn("watchdog")
 
     if not dormant:
-        guardian.write_heartbeat("main")
         threading.Thread(target=tick_loop, name="hardlock-ticker", daemon=True).start()
-        guardian.spawn("watchdog")
-        threading.Thread(target=guardian_loop, name="hardlock-guardian", daemon=True).start()
+        # The dev build is closable and guardian-free (see hard_lock/build.py).
+        if not build.DEV_BUILD:
+            guardian.write_heartbeat("main")
+            guardian.spawn("watchdog")
+            threading.Thread(target=guardian_loop, name="hardlock-guardian", daemon=True).start()
 
-    # System tray. The only stop is a cooldown-gated disarm — no one-click quit.
-    def request_disarm_from_tray() -> None:
+    # Tray stop action: dev build actually quits; prod requests the cooldown-gated
+    # disarm (no one-click quit).
+    def _tray_stop_action() -> None:
         try:
-            api.request_disarm()
+            if build.DEV_BUILD:
+                tick_stop.set()
+                _teardown_windows()
+            else:
+                api.request_disarm()
         except Exception:
             pass
 
@@ -432,7 +439,7 @@ def main(argv: "list[str] | None" = None) -> int:
         on_show_hud=open_hud,
         on_settings=open_settings,
         on_history=open_history,
-        on_disarm=request_disarm_from_tray,
+        on_disarm=_tray_stop_action,
     )
 
     # Dormant → the HUD shows the disarmed / re-arm state. Otherwise: first launch

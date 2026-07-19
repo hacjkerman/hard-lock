@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 
 from hard_lock import tray
 
@@ -24,6 +25,13 @@ class TrayTestCase(unittest.TestCase):
         self.assertTrue(any("Show HUD" in x for x in labels))
         self.assertTrue(any("Disarm" in x for x in labels))
         self.assertFalse(any("Quit" in x for x in labels))
+
+    def test_dev_build_shows_quit_not_disarm(self):
+        with mock.patch("hard_lock.build.DEV_BUILD", True):
+            icon = tray.build_icon(FakeApi(), lambda: None, lambda: None, lambda: None, lambda: None)
+        labels = [str(i.text) for i in icon.menu if getattr(i, "text", None)]
+        self.assertTrue(any("Quit" in x for x in labels))
+        self.assertFalse(any("Disarm" in x for x in labels))
 
     def test_menu_actions_wired(self):
         calls = []

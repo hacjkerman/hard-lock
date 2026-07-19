@@ -77,8 +77,14 @@ def build_icon(api, on_show_hud, on_settings, on_history, on_disarm):
                 pass
         return handler
 
-    # No one-click quit: the only way to stop the lock is a cooldown-gated
-    # disarm, so tired-you can't just close it.
+    # Prod has no one-click quit — the only stop is a cooldown-gated disarm, so
+    # tired-you can't just close it. The dev build restores a real Quit.
+    from . import build
+    last_item = (
+        pystray.MenuItem("Quit Hard Lock", wrap(on_disarm))
+        if build.DEV_BUILD
+        else pystray.MenuItem(disarm_label, wrap(on_disarm))
+    )
     menu = pystray.Menu(
         pystray.MenuItem(status_text, None, enabled=False),
         pystray.Menu.SEPARATOR,
@@ -86,7 +92,7 @@ def build_icon(api, on_show_hud, on_settings, on_history, on_disarm):
         pystray.MenuItem("Open settings", wrap(on_settings)),
         pystray.MenuItem("View history", wrap(on_history)),
         pystray.Menu.SEPARATOR,
-        pystray.MenuItem(disarm_label, wrap(on_disarm)),
+        last_item,
     )
     return pystray.Icon("hardlock", make_image(), "Hard Lock", menu)
 

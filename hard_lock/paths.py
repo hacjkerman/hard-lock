@@ -18,9 +18,14 @@ def is_frozen() -> bool:
 
 
 def data_dir() -> Path:
-    """Directory holding config.json / state.json. Created if missing."""
+    """Directory holding config.json / state.json. Created if missing. The dev
+    build (build.DEV_BUILD) uses a separate HardLockDev dir so it can never read
+    or clobber the committed prod install's config."""
+    from . import build
+
     if is_frozen():
-        base = Path(os.environ.get("APPDATA") or Path.home()) / APP_NAME
+        name = "HardLockDev" if build.DEV_BUILD else APP_NAME
+        base = Path(os.environ.get("APPDATA") or Path.home()) / name
     else:
         base = Path(__file__).resolve().parent.parent  # repo root
     base.mkdir(parents=True, exist_ok=True)

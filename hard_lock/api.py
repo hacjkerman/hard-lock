@@ -387,12 +387,13 @@ class Api:
         return {"installed": self._autostart_installed()}
 
     def apply_settings(self, new: dict) -> dict:
-        applied, deferred = self.config.apply_settings(new)
-        if applied or deferred:
-            self._log("settings", applied=applied, deferred=deferred)
+        applied, deferred, rejected = self.config.apply_settings(new)
+        if applied or deferred or rejected:
+            self._log("settings", applied=applied, deferred=deferred, rejected=rejected)
         return {
             "applied": applied,
             "deferred": deferred,
+            "rejected": rejected,
             "pending": self._pending_view(),
         }
 

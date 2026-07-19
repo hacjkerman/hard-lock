@@ -33,21 +33,21 @@ class ConfigTestCase(unittest.TestCase):
     # ───────── tightening is immediate ─────────
     def test_tightening_cap_is_immediate(self):
         cfg = self._cfg(daily_cap_minutes=480)
-        applied, deferred = cfg.apply_settings({"daily_cap_minutes": 120})
+        applied, deferred, _ = cfg.apply_settings({"daily_cap_minutes": 120})
         self.assertEqual(cfg.daily_cap_minutes, 120)
         self.assertTrue(applied)
         self.assertFalse(deferred)
 
     def test_tightening_cutoff_earlier_is_immediate(self):
         cfg = self._cfg(hard_cutoff_time="23:30")
-        _, deferred = cfg.apply_settings({"hard_cutoff_time": "22:00"})
+        _, deferred, _ = cfg.apply_settings({"hard_cutoff_time": "22:00"})
         self.assertEqual(cfg.hard_cutoff_time, "22:00")
         self.assertFalse(deferred)
 
     # ───────── weakening is deferred ─────────
     def test_weakening_cap_is_deferred(self):
         cfg = self._cfg(daily_cap_minutes=480, edit_cooldown_hours=24)
-        applied, deferred = cfg.apply_settings({"daily_cap_minutes": 600})
+        applied, deferred, _ = cfg.apply_settings({"daily_cap_minutes": 600})
         # value must NOT change yet
         self.assertEqual(cfg.daily_cap_minutes, 480)
         self.assertTrue(deferred)
@@ -56,19 +56,19 @@ class ConfigTestCase(unittest.TestCase):
 
     def test_weakening_cutoff_later_is_deferred(self):
         cfg = self._cfg(hard_cutoff_time="23:00")
-        _, deferred = cfg.apply_settings({"hard_cutoff_time": "23:45"})
+        _, deferred, _ = cfg.apply_settings({"hard_cutoff_time": "23:45"})
         self.assertEqual(cfg.hard_cutoff_time, "23:00")
         self.assertTrue(deferred)
 
     def test_enabling_dry_run_is_weakening(self):
         cfg = self._cfg(dry_run=False)
-        _, deferred = cfg.apply_settings({"dry_run": True})
+        _, deferred, _ = cfg.apply_settings({"dry_run": True})
         self.assertFalse(cfg.dry_run)  # still armed until cooldown
         self.assertTrue(deferred)
 
     def test_disabling_dry_run_is_tightening(self):
         cfg = self._cfg(dry_run=True)
-        applied, deferred = cfg.apply_settings({"dry_run": False})
+        applied, deferred, _ = cfg.apply_settings({"dry_run": False})
         self.assertFalse(cfg.dry_run)
         self.assertTrue(applied)
         self.assertFalse(deferred)
@@ -85,31 +85,31 @@ class ConfigTestCase(unittest.TestCase):
     # ───────── late_night_hour guard ─────────
     def test_raising_late_night_hour_is_weakening(self):
         cfg = self._cfg(late_night_hour=23)
-        _, deferred = cfg.apply_settings({"late_night_hour": 24})
+        _, deferred, _ = cfg.apply_settings({"late_night_hour": 24})
         self.assertEqual(cfg.late_night_hour, 23)
         self.assertTrue(deferred)
 
     def test_adding_a_defer_game_is_weakening(self):
         cfg = self._cfg(defer_for_games=["League of Legends.exe"])
-        _, deferred = cfg.apply_settings({"defer_for_games": ["League of Legends.exe", "dota2.exe"]})
+        _, deferred, _ = cfg.apply_settings({"defer_for_games": ["League of Legends.exe", "dota2.exe"]})
         self.assertEqual(cfg.defer_for_games, ["League of Legends.exe"])  # not yet
         self.assertTrue(deferred)
 
     def test_removing_a_defer_game_is_tightening(self):
         cfg = self._cfg(defer_for_games=["League of Legends.exe", "dota2.exe"])
-        applied, _ = cfg.apply_settings({"defer_for_games": ["League of Legends.exe"]})
+        applied, _, _ = cfg.apply_settings({"defer_for_games": ["League of Legends.exe"]})
         self.assertEqual(cfg.defer_for_games, ["League of Legends.exe"])
         self.assertTrue(applied)
 
     def test_raising_game_defer_buffer_is_weakening(self):
         cfg = self._cfg(game_defer_grace_seconds=180)
-        _, deferred = cfg.apply_settings({"game_defer_grace_seconds": 600})
+        _, deferred, _ = cfg.apply_settings({"game_defer_grace_seconds": 600})
         self.assertEqual(cfg.game_defer_grace_seconds, 180)
         self.assertTrue(deferred)
 
     def test_lowering_late_night_hour_is_tightening(self):
         cfg = self._cfg(late_night_hour=23)
-        applied, _ = cfg.apply_settings({"late_night_hour": 21})
+        applied, _, _ = cfg.apply_settings({"late_night_hour": 21})
         self.assertEqual(cfg.late_night_hour, 21)
         self.assertTrue(applied)
 
@@ -138,14 +138,14 @@ class ConfigTestCase(unittest.TestCase):
     # ───────── removing warnings is weakening ─────────
     def test_removing_a_warning_is_weakening(self):
         cfg = self._cfg(warning_minutes_before=[30, 10, 5, 1])
-        _, deferred = cfg.apply_settings({"warning_minutes_before": [10, 5, 1]})
+        _, deferred, _ = cfg.apply_settings({"warning_minutes_before": [10, 5, 1]})
         # dropping the 30-min heads-up reduces safety → must defer
         self.assertEqual(cfg.warning_minutes_before, [30, 10, 5, 1])
         self.assertTrue(deferred)
 
     def test_adding_a_warning_is_tightening(self):
         cfg = self._cfg(warning_minutes_before=[10, 5, 1])
-        applied, deferred = cfg.apply_settings({"warning_minutes_before": [30, 10, 5, 1]})
+        applied, deferred, _ = cfg.apply_settings({"warning_minutes_before": [30, 10, 5, 1]})
         self.assertEqual(cfg.warning_minutes_before, [30, 10, 5, 1])
         self.assertTrue(applied)
         self.assertFalse(deferred)
@@ -344,6 +344,32 @@ class ConfigTestCase(unittest.TestCase):
         self.assertFalse(cfg.is_committed())
         self.assertEqual(cfg.commit_remaining_seconds(), 0.0)
 
+    def test_disarm_blocked_while_committed(self):
+        cfg = self._cfg()
+        cfg.commit(3600)
+        cfg._data["disarm_at"] = (dt.datetime.now() - dt.timedelta(minutes=1)).isoformat()
+        self.assertFalse(cfg.disarm_due())  # a stale disarm can't fire during a commitment
+
+    def test_weakening_rejected_while_committed(self):
+        cfg = self._cfg(edit_cooldown_hours=24)
+        cfg._data["cap_sat"] = 480
+        cfg.commit(3600)
+        applied, deferred, rejected = cfg.apply_settings({"cap_sat": 600})  # raise = weaken
+        self.assertEqual(applied, [])
+        self.assertEqual(deferred, [])
+        self.assertTrue(rejected)
+        self.assertEqual(cfg._data["cap_sat"], 480)                 # unchanged
+        self.assertNotIn("cap_sat", cfg._data["pending_changes"])   # not even queued
+
+    def test_tightening_still_applies_while_committed(self):
+        cfg = self._cfg()
+        cfg._data["cap_sat"] = 480
+        cfg.commit(3600)
+        applied, deferred, rejected = cfg.apply_settings({"cap_sat": 300})  # lower = tighten
+        self.assertTrue(applied)
+        self.assertEqual(rejected, [])
+        self.assertEqual(cfg._data["cap_sat"], 300)
+
     # ───────── traffic-light + cutoff math ─────────
     def test_state_for_thresholds(self):
         cfg = self._cfg()
@@ -400,7 +426,7 @@ class ConfigTestCase(unittest.TestCase):
     def test_raising_one_days_cap_is_deferred(self):
         cfg = self._cfg(edit_cooldown_hours=24)
         cfg._data["cap_sat"] = 480
-        applied, deferred = cfg.apply_settings({"cap_sat": 720})
+        applied, deferred, _ = cfg.apply_settings({"cap_sat": 720})
         self.assertFalse(applied)
         self.assertTrue(deferred)
         self.assertIn("cap_sat", cfg._data["pending_changes"])
@@ -409,7 +435,7 @@ class ConfigTestCase(unittest.TestCase):
     def test_lowering_one_days_cap_is_immediate(self):
         cfg = self._cfg()
         cfg._data["cap_sat"] = 480
-        applied, deferred = cfg.apply_settings({"cap_sat": 300})
+        applied, deferred, _ = cfg.apply_settings({"cap_sat": 300})
         self.assertTrue(applied)
         self.assertFalse(deferred)
         self.assertEqual(cfg._data["cap_sat"], 300)
@@ -419,7 +445,7 @@ class ConfigTestCase(unittest.TestCase):
         # 01:30 < 23:30 on the raw clock. (day_reset_hour defaults to 4.)
         cfg = self._cfg(edit_cooldown_hours=24)
         cfg._data["cutoff_sat"] = "23:30"
-        applied, deferred = cfg.apply_settings({"cutoff_sat": "01:30"})
+        applied, deferred, _ = cfg.apply_settings({"cutoff_sat": "01:30"})
         self.assertFalse(applied)
         self.assertTrue(deferred)
         self.assertEqual(cfg._data["cutoff_sat"], "23:30")  # not yet in force
@@ -427,7 +453,7 @@ class ConfigTestCase(unittest.TestCase):
     def test_earlier_night_cutoff_is_immediate(self):
         cfg = self._cfg()
         cfg._data["cutoff_sat"] = "23:30"
-        applied, deferred = cfg.apply_settings({"cutoff_sat": "22:00"})
+        applied, deferred, _ = cfg.apply_settings({"cutoff_sat": "22:00"})
         self.assertTrue(applied)
         self.assertFalse(deferred)
         self.assertEqual(cfg._data["cutoff_sat"], "22:00")
@@ -437,11 +463,11 @@ class ConfigTestCase(unittest.TestCase):
         # pending change or reset its timer — the bug that wiped a weekend cutoff.
         cfg = self._cfg(edit_cooldown_hours=24)
         cfg._data["cutoff_sat"] = "23:30"
-        _, deferred = cfg.apply_settings({"cutoff_sat": "01:30"})
+        _, deferred, _ = cfg.apply_settings({"cutoff_sat": "01:30"})
         self.assertTrue(deferred)
         eff_at = cfg._data["pending_changes"]["cutoff_sat"]["effective_at"]
         # Apply the same queued value again → no-op, timer untouched.
-        applied2, deferred2 = cfg.apply_settings({"cutoff_sat": "01:30"})
+        applied2, deferred2, _ = cfg.apply_settings({"cutoff_sat": "01:30"})
         self.assertEqual(applied2, [])
         self.assertEqual(deferred2, [])
         self.assertIn("cutoff_sat", cfg._data["pending_changes"])

@@ -279,7 +279,7 @@ class SettingsWindow:
             messagebox.showerror("Invalid settings", str(exc), parent=self.top)
             return
 
-        applied, deferred = self.config.apply_settings(new)
+        applied, deferred, _rejected = self.config.apply_settings(new)
         msg_parts = []
         if applied:
             msg_parts.append("Applied now:\n  " + "\n  ".join(applied))

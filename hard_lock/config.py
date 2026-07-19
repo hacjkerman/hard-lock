@@ -354,6 +354,8 @@ class Config:
         (applied_descriptions, deferred_descriptions)."""
         applied: list[str] = []
         deferred: list[str] = []
+        rejected: list[str] = []
+        committed = self.is_committed()
         # A bare daily_cap_minutes / hard_cutoff_time means "set every day" — it
         # expands to the per-day keys (an explicit cap_<day> in the same call
         # wins). This keeps onboarding and legacy callers working now that the
@@ -387,6 +389,10 @@ class Config:
                 if pend is not None and pend.get("value") == value:
                     continue
                 if self._weakens(key, old, value):
+                    if committed:
+                        # Locked in: weakening is refused outright, not queued.
+                        rejected.append(f"{key}: {old} → {value}")
+                        continue
                     pending[key] = {"value": value, "effective_at": effective_at}
                     deferred.append(f"{key}: {old} → {value}")
                 else:
@@ -396,7 +402,7 @@ class Config:
 
             self._data["pending_changes"] = pending
             self.save()
-        return applied, deferred
+        return applied, deferred, rejected
 
     # ───────── disarm: the one sanctioned stop (cooldown-gated) ─────────
     @property

@@ -72,6 +72,9 @@ async function finish() {
   $("back").disabled = true;
   try {
     const res = await window.pywebview.api.finish_onboarding(collect());
+    if (isOn("commit-enable")) {
+      await window.pywebview.api.commit(parseInt($("commit-duration").value, 10));
+    }
     if (res.autostart && !res.autostart.ok) {
       const msg = $("autostart-msg");
       msg.textContent = `Autostart: ${res.autostart.message} You can run install-autostart.bat as administrator later.`;
@@ -90,7 +93,7 @@ async function finish() {
 
 function wire() {
   $("cap").addEventListener("input", () => { $("cap-val").textContent = capHours() % 1 ? capHours().toFixed(1) : String(capHours()); });
-  for (const id of ["dry_run", "autostart"]) {
+  for (const id of ["dry_run", "autostart", "commit-enable"]) {
     $(id).addEventListener("click", () => $(id).classList.toggle("on"));
   }
   $("back").addEventListener("click", () => showStep(current - 1));

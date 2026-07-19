@@ -229,6 +229,13 @@ async function reload() {
   $("today-usage").textContent = `${status.used_hm} / ${status.cap_hm}`;
   $("armed-label").textContent = status.dry_run ? "Dry-run" : "Lock armed";
   $("armed-dot").style.color = status.dry_run ? "var(--amber)" : "var(--green)";
+  const cs = document.querySelector("#commit-status .row-value");
+  if (cs) {
+    cs.textContent = status.committed
+      ? `🔒 Locked in — ${status.commit_remaining_hm} left (until ${String(status.commit_until).slice(0, 10)})`
+      : "Not committed.";
+  }
+  $("commit-btn").textContent = status.committed ? "Extend" : "Lock in";
   // Autostart state is queried separately (schtasks), so it's not part of the
   // frequent get_settings poll.
   if (!autostartBusy) {
@@ -256,6 +263,21 @@ function wire() {
   });
 
   $("autostart").addEventListener("click", onAutostartToggle);
+
+  // Lock in: two-step confirm (can't be undone before the term ends).
+  const commitBtn = $("commit-btn");
+  commitBtn.addEventListener("click", async () => {
+    if (commitBtn.dataset.armed !== "1") {
+      commitBtn.dataset.armed = "1";
+      commitBtn.textContent = "Confirm — can't undo";
+      setTimeout(() => { commitBtn.dataset.armed = "0"; reload(); }, 4000);
+      return;
+    }
+    commitBtn.dataset.armed = "0";
+    const secs = parseInt($("commit-duration").value, 10);
+    await window.pywebview.api.commit(secs);
+    await reload();
+  });
 
   $("reload").addEventListener("click", reload);
 
@@ -295,7 +317,9 @@ function wire() {
       const parts = [];
       if (res.applied.length) parts.push(`${res.applied.length} applied now`);
       if (res.deferred.length) parts.push(`${res.deferred.length} queued (activates after cooldown — see Pending changes)`);
-      setStatus(parts.join(" · ") || "No changes.", res.deferred.length ? "warn" : "ok");
+      if (res.rejected && res.rejected.length) parts.push(`${res.rejected.length} locked (committed)`);
+      const cls = res.rejected && res.rejected.length ? "err" : (res.deferred.length ? "warn" : "ok");
+      setStatus(parts.join(" · ") || "No changes.", cls);
       renderPending(res.pending);
       await reload();
     } catch (err) {

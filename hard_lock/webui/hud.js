@@ -45,6 +45,11 @@ function render(status) {
       `Disarming in ${status.disarm_remaining_hm} — the lock still holds until then.`;
   }
   $("disarmed-note").classList.toggle("hidden", !status.disarmed);
+
+  const committed = !!status.committed;
+  $("committed-note").classList.toggle("hidden", !committed);
+  if (committed) $("committed-until").textContent = `${status.commit_remaining_hm} left`;
+  $("lock-in").textContent = committed ? "Extend commitment…" : "Lock in a commitment…";
   const dn = $("dry-run-note");
   dn.classList.toggle("hidden", !status.dry_run);
   dn.textContent = status.dry_run_fired
@@ -102,6 +107,10 @@ function wire() {
   });
   $("re-arm").addEventListener("click", async () => {
     await window.pywebview.api.re_arm();
+  });
+  $("lock-in").addEventListener("click", () => {
+    // The duration picker lives in Settings — keep one picker.
+    window.pywebview.api.open_settings();
   });
   $("toggle-dry-run").addEventListener("click", async () => {
     const settings = await window.pywebview.api.get_settings();

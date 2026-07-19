@@ -210,6 +210,32 @@
           </div>
         </section>
 
+        <section class="section">
+          <div class="section-head">
+            <div class="section-title">Commitment (lock in)</div>
+            <div class="section-sub">
+              Commit the lock to a fixed term. Until it ends you cannot disarm it
+              or weaken any limit — only tighten. Extend-only; you can never
+              shorten or cancel a commitment early.
+            </div>
+          </div>
+          <div id="commit-status" class="row"><div class="row-value muted">Not committed.</div></div>
+          <div class="row">
+            <div class="row-label">Lock in for</div>
+            <div class="row-value">
+              <select id="commit-duration" class="field" style="width: 140px;">
+                <option value="2592000">1 month</option>
+                <option value="7776000">3 months</option>
+                <option value="15552000">6 months</option>
+                <option value="31536000">1 year</option>
+                <option value="63072000">2 years</option>
+                <option value="157680000">5 years</option>
+              </select>
+              <button id="commit-btn" class="btn sm danger" style="margin-left: 10px;">Lock in</button>
+            </div>
+          </div>
+        </section>
+
         <div class="anti-cheat-note">
           <strong>Anti-cheat:</strong> weakening changes are deferred by your
           edit cooldown. Tired-you-at-11pm can't relax the lock to get more

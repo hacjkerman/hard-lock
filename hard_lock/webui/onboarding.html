@@ -111,6 +111,24 @@
             </div>
             <div class="toggle" id="autostart"><div class="knob"></div></div>
           </div>
+          <div class="toggle-row">
+            <div class="toggle-copy">
+              <div class="toggle-title">Lock in a commitment</div>
+              <div class="toggle-sub">
+                Commit the lock for a fixed term. Until it ends you can't disarm
+                or weaken it — only tighten. Off by default.
+                <select id="commit-duration" class="field" style="width: 130px; margin-top: 8px;">
+                  <option value="2592000">1 month</option>
+                  <option value="7776000">3 months</option>
+                  <option value="15552000">6 months</option>
+                  <option value="31536000">1 year</option>
+                  <option value="63072000">2 years</option>
+                  <option value="157680000">5 years</option>
+                </select>
+              </div>
+            </div>
+            <div class="toggle" id="commit-enable"><div class="knob"></div></div>
+          </div>
         </section>
 
         <!-- 5 · Done -->

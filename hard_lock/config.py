@@ -27,6 +27,9 @@ DEFAULTS = {
     # When set (ISO timestamp), a disarm has been requested; once now passes it,
     # the app + watchdog stop and stop resurrecting. The only sanctioned way out.
     "disarm_at": None,
+    # When set (ISO timestamp) and in the future, a fixed-term commitment is
+    # active: the lock can't be disarmed or weakened until it passes.
+    "commit_until": None,
     "pending_changes": {},
 }
 
@@ -416,6 +419,8 @@ class Config:
             self.save()
 
     def disarm_due(self, now: "dt.datetime | None" = None) -> bool:
+        if self.is_committed(now):
+            return False  # a commitment can't be lifted early, even a stale disarm
         at = self._data.get("disarm_at")
         if not at:
             return False
@@ -432,6 +437,57 @@ class Config:
             return max(0.0, (dt.datetime.fromisoformat(at) - (now or dt.datetime.now())).total_seconds())
         except (TypeError, ValueError):
             return None
+
+    # ───────── commitment ("lock in"): a fixed term you can't lift early ─────────
+    @property
+    def commit_until(self):
+        return self._data.get("commit_until")
+
+    def is_committed(self, now: "dt.datetime | None" = None) -> bool:
+        # The dev build never enforces commitments (see hard_lock/build.py).
+        from . import build
+        if build.DEV_BUILD:
+            return False
+        at = self._data.get("commit_until")
+        if not at:
+            return False
+        try:
+            return (now or dt.datetime.now()) < dt.datetime.fromisoformat(at)
+        except (TypeError, ValueError):
+            return False
+
+    def commit_remaining_seconds(self, now: "dt.datetime | None" = None):
+        at = self._data.get("commit_until")
+        if not at:
+            return None
+        try:
+            return max(0.0, (dt.datetime.fromisoformat(at) - (now or dt.datetime.now())).total_seconds())
+        except (TypeError, ValueError):
+            return None
+
+    def commit(self, duration_seconds) -> str:
+        """Lock in for a term. Extend-only: never shortens an existing
+        commitment. Committing is a tightening, so it applies instantly; it also
+        drops any pending disarm and any queued weakening changes (they can't
+        benefit you during the term)."""
+        try:
+            secs = int(duration_seconds)
+        except (TypeError, ValueError):
+            secs = 0
+        secs = max(60, min(secs, 10 * 365 * 24 * 3600))  # 1 min … ~10 years
+        with self._lock:
+            end = dt.datetime.now() + dt.timedelta(seconds=secs)
+            current = self._data.get("commit_until")
+            if current:
+                try:
+                    end = max(end, dt.datetime.fromisoformat(current))
+                except (TypeError, ValueError):
+                    pass
+            self._data["commit_until"] = end.isoformat()
+            self._data["disarm_at"] = None       # a pending disarm can't survive
+            self._data["pending_changes"] = {}    # queued weakenings are moot now
+            self.save()
+        return self._data["commit_until"]
 
     def cancel_pending(self, key: str) -> bool:
         with self._lock:

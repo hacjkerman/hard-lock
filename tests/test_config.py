@@ -300,6 +300,50 @@ class ConfigTestCase(unittest.TestCase):
         cfg._data["disarm_at"] = (dt.datetime.now() - dt.timedelta(minutes=1)).isoformat()
         self.assertTrue(cfg.disarm_due())
 
+    # ───────── commitment ("lock in") ─────────
+    def test_not_committed_by_default(self):
+        cfg = self._cfg()
+        self.assertIsNone(cfg.commit_until)
+        self.assertFalse(cfg.is_committed())
+        self.assertIsNone(cfg.commit_remaining_seconds())
+
+    def test_commit_sets_future_end_and_is_committed(self):
+        cfg = self._cfg()
+        cfg.commit(3600)
+        self.assertIsNotNone(cfg.commit_until)
+        self.assertTrue(cfg.is_committed())
+        self.assertGreater(cfg.commit_remaining_seconds(), 3500)
+
+    def test_commit_is_extend_only(self):
+        cfg = self._cfg()
+        cfg.commit(3600)
+        first = cfg.commit_until
+        cfg.commit(60)  # shorter → must NOT shorten the existing commitment
+        self.assertEqual(cfg.commit_until, first)
+        cfg.commit(7200)  # longer → extends
+        self.assertGreater(cfg.commit_until, first)
+
+    def test_commit_clears_pending_disarm(self):
+        cfg = self._cfg()
+        cfg.request_disarm()
+        self.assertIsNotNone(cfg.disarm_at)
+        cfg.commit(3600)
+        self.assertIsNone(cfg.disarm_at)
+
+    def test_commit_cancels_pending_weakening(self):
+        cfg = self._cfg(edit_cooldown_hours=24)
+        cfg._data["cap_sat"] = 480
+        cfg.apply_settings({"cap_sat": 600})  # weakening → queued
+        self.assertIn("cap_sat", cfg._data["pending_changes"])
+        cfg.commit(3600)
+        self.assertEqual(cfg._data["pending_changes"], {})
+
+    def test_expired_commitment_is_not_committed(self):
+        cfg = self._cfg()
+        cfg._data["commit_until"] = (dt.datetime.now() - dt.timedelta(minutes=1)).isoformat()
+        self.assertFalse(cfg.is_committed())
+        self.assertEqual(cfg.commit_remaining_seconds(), 0.0)
+
     # ───────── traffic-light + cutoff math ─────────
     def test_state_for_thresholds(self):
         cfg = self._cfg()

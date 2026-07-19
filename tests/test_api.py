@@ -350,6 +350,29 @@ class ApiStatusTestCase(unittest.TestCase):
         self.assertIsNone(config.disarm_at)
         self.assertEqual(called, [1])
 
+    def test_commit_sets_committed_status(self):
+        api, config, _ = make()
+        api.commit(3600)
+        s = api.get_status()
+        self.assertTrue(s["committed"])
+        self.assertIsNotNone(s["commit_until"])
+        self.assertIsNotNone(s["commit_remaining_hm"])
+
+    def test_request_disarm_refused_while_committed(self):
+        api, config, _ = make()
+        api.commit(3600)
+        res = api.request_disarm()
+        self.assertFalse(res["ok"])
+        self.assertTrue(res.get("committed"))
+        self.assertIsNone(config.disarm_at)
+        self.assertFalse(api.get_status()["disarm_pending"])
+
+    def test_request_disarm_works_when_not_committed(self):
+        api, config, _ = make({"edit_cooldown_hours": 24})
+        res = api.request_disarm()
+        self.assertTrue(res["ok"])
+        self.assertIsNotNone(config.disarm_at)
+
     def test_tracker_accumulates_into_state(self):
         api, _, state = make(tracker_delta=5.0)
         api.tick()

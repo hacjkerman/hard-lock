@@ -327,6 +327,12 @@ class Api:
                 _fmt_hm(self.config.disarm_remaining_seconds())
                 if self.config.disarm_at is not None and not self.config.disarm_due() else None
             ),
+            "committed": self.config.is_committed(),
+            "commit_until": self.config.commit_until,
+            "commit_remaining_hm": (
+                _fmt_hm(self.config.commit_remaining_seconds())
+                if self.config.is_committed() else None
+            ),
             "used_seconds": used_seconds,
             "used_hm": _fmt_hm(used_seconds),
             "used_pct": used_pct,
@@ -412,10 +418,20 @@ class Api:
 
     # ───────── disarm (the sanctioned, cooldown-gated stop) ─────────
     def request_disarm(self) -> dict:
+        if self.config.is_committed():
+            return {"ok": False, "committed": True,
+                    "commit_remaining_hm": _fmt_hm(self.config.commit_remaining_seconds() or 0)}
         at = self.config.request_disarm()
         self._log("disarm_requested", effective_at=at)
         return {"ok": True, "disarm_at": at,
                 "disarm_remaining_hm": _fmt_hm(self.config.disarm_remaining_seconds() or 0)}
+
+    def commit(self, duration_seconds) -> dict:
+        """Lock in for a fixed term (extend-only). Can't be undone before it ends."""
+        at = self.config.commit(duration_seconds)
+        self._log("committed", commit_until=at)
+        return {"ok": True, "commit_until": at,
+                "commit_remaining_hm": _fmt_hm(self.config.commit_remaining_seconds() or 0)}
 
     def cancel_disarm(self) -> dict:
         self.config.cancel_disarm()
@@ -631,6 +647,9 @@ class Api:
             tone = "neutral"
         elif t == "pending_activated":
             label = f"Activated queued {e.get('key', '')} (skipped cooldown)"
+            tone = "amber"
+        elif t == "committed":
+            label = f"Locked in · until {str(e.get('commit_until', ''))[:16].replace('T', ' ')}"
             tone = "amber"
         elif t == "session_timer":
             label = f"Late-night timer · {e.get('minutes')} min"

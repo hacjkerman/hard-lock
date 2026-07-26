@@ -28,6 +28,12 @@ rested version made.
 - **Don't-kill-my-game** — if a configured game (League of Legends by default) is
   in progress when a limit is hit, the shutdown is held until the game ends plus
   a buffer (3 min by default). See `defer_for_games` / `game_defer_grace_seconds`.
+- **Wait for Claude Code** — the grace countdown still shows, but the machine
+  won't actually power off while a Claude Code session is still working. Detected
+  from session-transcript activity across *all* sessions and subagents (recent
+  appends, plus an unanswered `tool_use` so a single long-running tool still
+  counts). No way to extend it manually. See `defer_for_claude` /
+  `claude_active_window_seconds`.
 - **Grace countdown** — a final, uncancelable 60s window to save your work.
 - **Tighten now, weaken later** — stricter changes apply immediately; looser
   changes are queued and only activate after the edit cooldown (default 24h).

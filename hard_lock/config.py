@@ -22,9 +22,11 @@ DEFAULTS = {
     # plus game_defer_grace_seconds. Empty list disables the feature.
     "defer_for_games": ["League of Legends.exe"],
     "game_defer_grace_seconds": 180,
-    # Don't power off while a Claude Code session (claude.exe) is running. The
-    # grace warning still shows; the machine just waits for Claude to finish.
+    # Don't power off while a Claude Code session is actively working. The grace
+    # warning still shows; the machine just waits for Claude to finish. "Working"
+    # = some session transcript written within claude_active_window_seconds.
     "defer_for_claude": True,
+    "claude_active_window_seconds": 300,
     "dry_run": True,
     "setup_completed": False,
     # When set (ISO timestamp), a disarm has been requested; once now passes it,
@@ -267,6 +269,10 @@ class Config:
     @property
     def defer_for_claude(self) -> bool:
         return bool(self._data.get("defer_for_claude", True))
+
+    @property
+    def claude_active_window_seconds(self) -> int:
+        return int(self._data.get("claude_active_window_seconds", 300))
 
     def logical_date(self, now: dt.datetime | None = None) -> str:
         """The usage 'day' key. The day rolls over at day_reset_hour (04:00 by

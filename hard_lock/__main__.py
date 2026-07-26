@@ -81,7 +81,8 @@ def _run_test_shutdown(rest: "list[str]") -> int:
         log.append("shutdown_test", dry_run=dry, grace_seconds=grace)
     except Exception:
         pass
-    claude_active = (lambda: claudecode.is_claude_active()) if config.defer_for_claude else None
+    claude_active = ((lambda: claudecode.is_claude_active(config.claude_active_window_seconds))
+                     if config.defer_for_claude else None)
     GraceCountdown(grace, dry, claude_active=claude_active).run()  # counts down → shutdown (or waits for Claude)
     return 0
 
@@ -483,7 +484,8 @@ def main(argv: "list[str] | None" = None) -> int:
     # exited so we own the thread again.
     if grace_requested[0]:
         # Wait for any active Claude Code session before actually powering off.
-        claude_active = (lambda: claudecode.is_claude_active()) if config.defer_for_claude else None
+        claude_active = ((lambda: claudecode.is_claude_active(config.claude_active_window_seconds))
+                     if config.defer_for_claude else None)
         GraceCountdown(config.grace_seconds, config.dry_run, claude_active=claude_active).run()
     return 0
 

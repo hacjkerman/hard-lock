@@ -193,9 +193,11 @@
           <div class="section-head">
             <div class="section-title">Wait for Claude Code</div>
             <div class="section-sub">
-              Don't power off while a Claude Code session (claude.exe) is running.
-              The shutdown warning still shows; the machine just waits for Claude
-              to finish, then shuts down. Turning this on is <em>weakening</em>
+              Don't power off while a Claude Code session is still working —
+              detected from session transcript activity (all sessions and
+              subagents), including a single long-running tool. The shutdown
+              warning still shows; the machine just waits, then shuts down once
+              every session is idle. Turning this on is <em>weakening</em>
               (queued); off is <em>tightening</em> (instant).
             </div>
           </div>

@@ -559,6 +559,17 @@ class ApiStatusTestCase(unittest.TestCase):
         self.assertEqual(shutdown["reason"], "cap")
         self.assertTrue(shutdown["dry_run"])
 
+    def test_tick_error_and_committed_render_in_history(self):
+        # A broken clock must be visible in History, not silently hidden.
+        api, _, _ = make()
+        view = api._event_view({"ts": "2026-07-21T12:00:00", "type": "tick_error",
+                                "error": "OSError: disk full"})
+        self.assertIn("Clock error", view["label"])
+        self.assertEqual(view["tone"], "red")
+        view = api._event_view({"ts": "2026-07-21T12:00:00", "type": "committed",
+                                "commit_until": "2027-07-21T12:00:00"})
+        self.assertIn("Locked in", view["label"])
+
     def test_due_pending_applies_during_tick(self):
         """A queued cap-raise that has come due should activate while the app
         is running (on the next tick), not only after a restart."""

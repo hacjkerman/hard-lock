@@ -396,11 +396,21 @@ def main(argv: "list[str] | None" = None) -> int:
         return 0  # another armed instance already owns the lock
 
     def tick_loop() -> None:
+        # A silently-swallowed tick error used to leave the app running but inert
+        # (alive, enforcing nothing, looking fine). Log failures instead — once per
+        # distinct error, so History shows a broken clock rather than hiding it.
+        seen: set[str] = set()
         while not tick_stop.wait(1.0):
             try:
                 api.tick()
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001 — must never kill the loop
+                key = f"{type(exc).__name__}: {exc}"
+                if key not in seen:
+                    seen.add(key)
+                    try:
+                        event_log.append("tick_error", error=key)
+                    except Exception:
+                        pass
 
     def guardian_loop() -> None:
         # Heartbeat + resurrect the watchdog; stop everything once a disarm matures.

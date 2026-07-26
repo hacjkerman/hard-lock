@@ -652,6 +652,9 @@ class Api:
         elif t == "committed":
             label = f"Locked in · until {str(e.get('commit_until', ''))[:16].replace('T', ' ')}"
             tone = "amber"
+        elif t == "tick_error":
+            label = f"Clock error · {str(e.get('error', ''))[:60]}"
+            tone = "red"
         elif t == "session_timer":
             label = f"Late-night timer · {e.get('minutes')} min"
             tone = "neutral"

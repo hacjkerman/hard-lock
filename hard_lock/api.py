@@ -364,6 +364,7 @@ class Api:
             "late_night_hour": self.config.late_night_hour,
             "day_reset_hour": self.config.day_reset_hour,
             "dry_run": self.config.dry_run,
+            "defer_for_claude": self.config.defer_for_claude,
             "pending": self._pending_view(),
         }
 

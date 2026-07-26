@@ -20,9 +20,13 @@ def show_warning(message: str) -> None:
 
 
 class GraceCountdown:
-    def __init__(self, seconds: int, dry_run: bool):
+    def __init__(self, seconds: int, dry_run: bool, claude_active=None):
         self.remaining = seconds
         self.dry_run = dry_run
+        # Optional callable → True while a Claude Code session is running. When the
+        # countdown hits zero we hold the power-off (but keep this window up) until
+        # it returns False, so we never kill the machine mid-Claude-turn.
+        self.claude_active = claude_active
         self.root = tk.Tk()
         self.root.title("HARD LOCK — Shutting Down")
         self.root.overrideredirect(True)
@@ -38,11 +42,12 @@ class GraceCountdown:
             font=("Consolas", 48, "bold"),
         )
         self.label.pack(side="left", padx=(0, 20))
-        tk.Label(
+        self.msg = tk.Label(
             bar,
             text="SAVE YOUR WORK — SHUTDOWN CANNOT BE CANCELED",
             fg="white", bg="black", font=("Consolas", 14, "bold"),
-        ).pack(side="left")
+        )
+        self.msg.pack(side="left")
 
         self.root.update_idletasks()
         w = self.root.winfo_reqwidth()
@@ -61,6 +66,18 @@ class GraceCountdown:
 
     def _tick(self) -> None:
         if self.remaining <= 0:
+            # Wait for Claude Code to finish before actually powering off — the
+            # window stays up (message still shown), we just don't shut down yet.
+            if self.claude_active is not None:
+                try:
+                    holding = self.claude_active()
+                except Exception:
+                    holding = False
+                if holding:
+                    self.label.config(text="0")
+                    self.msg.config(text="Waiting for Claude Code to finish…")
+                    self.root.after(1000, self._tick)
+                    return
             self.root.destroy()
             initiate_shutdown(dry_run=self.dry_run)
             return

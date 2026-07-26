@@ -191,6 +191,27 @@
 
         <section class="section">
           <div class="section-head">
+            <div class="section-title">Wait for Claude Code</div>
+            <div class="section-sub">
+              Don't power off while a Claude Code session (claude.exe) is running.
+              The shutdown warning still shows; the machine just waits for Claude
+              to finish, then shuts down. Turning this on is <em>weakening</em>
+              (queued); off is <em>tightening</em> (instant).
+            </div>
+          </div>
+
+          <div class="row row-toggle">
+            <div class="row-label" style="flex: 1;">
+              <div>Wait for Claude is <span id="claude-state" class="tone-green" style="font-weight: 600;">ON</span></div>
+            </div>
+            <div class="toggle" id="defer_for_claude">
+              <div class="knob"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-head">
             <div class="section-title">Start at logon</div>
             <div class="section-sub">
               Launch Hard Lock automatically when you sign in (a Task Scheduler

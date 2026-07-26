@@ -159,6 +159,12 @@ function applyFormValues(settings) {
   $("dry-state").textContent = settings.dry_run ? "ON" : "OFF";
   $("dry-state").classList.toggle("tone-amber", !!settings.dry_run);
   $("dry-state").classList.toggle("tone-green", !settings.dry_run);
+
+  const claude = $("defer_for_claude");
+  claude.classList.toggle("on", !!settings.defer_for_claude);
+  $("claude-state").textContent = settings.defer_for_claude ? "ON" : "OFF";
+  $("claude-state").classList.toggle("tone-green", !!settings.defer_for_claude);
+  $("claude-state").classList.toggle("tone-amber", !settings.defer_for_claude);
 }
 
 let autostartBusy = false;
@@ -211,6 +217,7 @@ function readFormValues() {
     edit_cooldown_hours: parseInt($("edit_cooldown_hours").value, 10),
     late_night_hour: parseInt($("late_night_hour").value, 10),
     dry_run: $("dry_run").classList.contains("on"),
+    defer_for_claude: $("defer_for_claude").classList.contains("on"),
   };
   for (const k of dayKeys) {
     form[`cap_${k}`] = parseInt($(`cap_${k}`).value, 10);
@@ -263,6 +270,15 @@ function wire() {
   });
 
   $("autostart").addEventListener("click", onAutostartToggle);
+
+  $("defer_for_claude").addEventListener("click", () => {
+    const el = $("defer_for_claude");
+    el.classList.toggle("on");
+    const on = el.classList.contains("on");
+    $("claude-state").textContent = on ? "ON" : "OFF";
+    $("claude-state").classList.toggle("tone-green", on);
+    $("claude-state").classList.toggle("tone-amber", !on);
+  });
 
   // Lock in: two-step confirm (can't be undone before the term ends).
   const commitBtn = $("commit-btn");

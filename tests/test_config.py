@@ -101,6 +101,22 @@ class ConfigTestCase(unittest.TestCase):
         self.assertEqual(cfg.defer_for_games, ["League of Legends.exe"])
         self.assertTrue(applied)
 
+    def test_defer_for_claude_default_on(self):
+        cfg = self._cfg()
+        self.assertTrue(cfg.defer_for_claude)
+
+    def test_enabling_claude_defer_is_weakening(self):
+        cfg = self._cfg(defer_for_claude=False, edit_cooldown_hours=24)
+        _, deferred, _ = cfg.apply_settings({"defer_for_claude": True})
+        self.assertFalse(cfg.defer_for_claude)  # deferred, not yet on
+        self.assertTrue(deferred)
+
+    def test_disabling_claude_defer_is_tightening(self):
+        cfg = self._cfg(defer_for_claude=True)
+        applied, _, _ = cfg.apply_settings({"defer_for_claude": False})
+        self.assertFalse(cfg.defer_for_claude)
+        self.assertTrue(applied)
+
     def test_raising_game_defer_buffer_is_weakening(self):
         cfg = self._cfg(game_defer_grace_seconds=180)
         _, deferred, _ = cfg.apply_settings({"game_defer_grace_seconds": 600})

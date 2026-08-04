@@ -133,7 +133,7 @@ def main(argv: "list[str] | None" = None) -> int:
 
     from . import build, guardian
 
-    from . import league, claudecode
+    from . import league, claudecode, winstyle
     from .api import Api
     from .history import DayHistory, EventLog
     from .tracker import ActiveTimeTracker
@@ -223,6 +223,18 @@ def main(argv: "list[str] | None" = None) -> int:
         hud_window_ref[0] = win
         hud_visible[0] = True
         hud_shown_at[0] = time.monotonic()
+
+        def _detaskbar() -> None:
+            # The HUD is an always-on-top widget, not a document window — strip
+            # its taskbar button so Windows can't flash it for attention. The
+            # native window exists a moment after create_window returns, so
+            # retry briefly rather than racing it.
+            for _ in range(40):  # ~10s
+                if winstyle.hide_from_taskbar("Hard Lock"):
+                    return
+                time.sleep(0.25)
+
+        threading.Thread(target=_detaskbar, name="hardlock-detaskbar", daemon=True).start()
 
         def _on_hud_closing():
             # Hide to the tray instead of exiting — unless we're really shutting

@@ -6,7 +6,7 @@ from PyInstaller.utils.hooks import collect_all
 
 datas = [("hard_lock/webui", "hard_lock/webui")]
 binaries = []
-hiddenimports = ["hard_lock.guardian"]
+hiddenimports = ["hard_lock.guardian", "hard_lock.winstyle"]
 
 for pkg in ("webview", "pystray", "PIL"):
     d, b, h = collect_all(pkg)

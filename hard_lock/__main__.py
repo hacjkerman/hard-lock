@@ -1,5 +1,6 @@
 import sys
 import threading
+import time
 
 from . import autostart, paths, tray
 from .config import Config
@@ -153,6 +154,9 @@ def main(argv: "list[str] | None" = None) -> int:
     # after — but only if we were the ones who hid it.
     hud_visible: list[bool] = [False]
     hud_auto_hidden: list[bool] = [False]
+    # When the HUD was last shown (monotonic), so it can tuck itself away after
+    # hud_auto_hide_minutes instead of sitting on screen/taskbar all day.
+    hud_shown_at: "list[float | None]" = [None]
     grace_requested: list[bool] = [False]
     # When True, the HUD's close button really closes (grace/quit); otherwise a
     # close just hides it to the tray so the app keeps running in the background.
@@ -198,6 +202,7 @@ def main(argv: "list[str] | None" = None) -> int:
             try:
                 existing.show()
                 hud_visible[0] = True
+                hud_shown_at[0] = time.monotonic()
                 _dismiss_prompt()  # HUD already up (on-demand path) → safe to destroy now
                 return
             except Exception:
@@ -217,6 +222,7 @@ def main(argv: "list[str] | None" = None) -> int:
         )
         hud_window_ref[0] = win
         hud_visible[0] = True
+        hud_shown_at[0] = time.monotonic()
 
         def _on_hud_closing():
             # Hide to the tray instead of exiting — unless we're really shutting
@@ -333,6 +339,7 @@ def main(argv: "list[str] | None" = None) -> int:
                 hud_auto_hidden[0] = False
                 win.show()
                 hud_visible[0] = True
+                hud_shown_at[0] = time.monotonic()
         except Exception:
             pass
 
@@ -395,12 +402,33 @@ def main(argv: "list[str] | None" = None) -> int:
     if not build.DEV_BUILD and not dormant and guardian.acquire_singleton(r"Local\HardLockMain") is None:
         return 0  # another armed instance already owns the lock
 
+    def _maybe_auto_hide_hud() -> None:
+        """Tuck the HUD to the tray once it's been on screen long enough, so it
+        isn't sitting on the taskbar all day. The lock keeps running; the tray
+        icon still shows the time remaining, and clicking it reopens the HUD."""
+        minutes = config.hud_auto_hide_minutes
+        if minutes <= 0 or not hud_visible[0] or hud_shown_at[0] is None:
+            return
+        if time.monotonic() - hud_shown_at[0] < minutes * 60:
+            return
+        win = hud_window_ref[0]
+        if win is None:
+            return
+        try:
+            win.hide()
+        except Exception:
+            return
+        hud_visible[0] = False
+        hud_shown_at[0] = None
+        hud_auto_hidden[0] = False  # a timed hide is not the game auto-hide
+
     def tick_loop() -> None:
         # A silently-swallowed tick error used to leave the app running but inert
         # (alive, enforcing nothing, looking fine). Log failures instead — once per
         # distinct error, so History shows a broken clock rather than hiding it.
         seen: set[str] = set()
         while not tick_stop.wait(1.0):
+            _maybe_auto_hide_hud()
             try:
                 api.tick()
             except Exception as exc:  # noqa: BLE001 — must never kill the loop

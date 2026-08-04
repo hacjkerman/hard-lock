@@ -27,6 +27,9 @@ DEFAULTS = {
     # = some session transcript written within claude_active_window_seconds.
     "defer_for_claude": True,
     "claude_active_window_seconds": 300,
+    # Tuck the HUD away to the tray after it's been on screen this long, so it
+    # isn't sitting on the taskbar all day. 0 = never auto-hide.
+    "hud_auto_hide_minutes": 30,
     "dry_run": True,
     "setup_completed": False,
     # When set (ISO timestamp), a disarm has been requested; once now passes it,
@@ -269,6 +272,16 @@ class Config:
     @property
     def defer_for_claude(self) -> bool:
         return bool(self._data.get("defer_for_claude", True))
+
+    @property
+    def claude_active_window_seconds(self) -> int:
+        return int(self._data.get("claude_active_window_seconds", 300))
+
+    @property
+    def hud_auto_hide_minutes(self) -> int:
+        """Minutes the HUD stays on screen before tucking itself to the tray.
+        0 disables auto-hide. Purely cosmetic — never affects enforcement."""
+        return int(self._data.get("hud_auto_hide_minutes", 30))
 
     @property
     def claude_active_window_seconds(self) -> int:

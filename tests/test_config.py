@@ -101,6 +101,18 @@ class ConfigTestCase(unittest.TestCase):
         self.assertEqual(cfg.defer_for_games, ["League of Legends.exe"])
         self.assertTrue(applied)
 
+    def test_hud_auto_hide_defaults_to_30_minutes(self):
+        cfg = self._cfg()
+        self.assertEqual(cfg.hud_auto_hide_minutes, 30)
+
+    def test_hud_auto_hide_can_be_disabled(self):
+        cfg = self._cfg(hud_auto_hide_minutes=0)
+        self.assertEqual(cfg.hud_auto_hide_minutes, 0)  # 0 = never auto-hide
+
+    def test_claude_active_window_default(self):
+        cfg = self._cfg()
+        self.assertEqual(cfg.claude_active_window_seconds, 300)
+
     def test_defer_for_claude_default_on(self):
         cfg = self._cfg()
         self.assertTrue(cfg.defer_for_claude)

@@ -11,6 +11,29 @@ rested version made.
 > determined can end the process or remove the scheduled task. It's built to
 > add friction, not to be tamper-proof.
 
+> ⚠️ **This app can force your PC to shut down.** The final shutdown runs
+> `shutdown /s /f` — it force-closes applications, so **unsaved work in other
+> programs is lost**. You get warnings (30/10/5/1 min) and a 60-second grace
+> countdown first. It ships with **dry-run ON**, meaning it simulates the
+> shutdown and never actually powers off until you deliberately arm it. Try it
+> in dry-run for a day before arming it. Removal instructions are at the bottom.
+
+## Download
+
+Grab the latest `HardLock-vX.Y.Z-win64.zip` from the
+[Releases page](https://github.com/hacjkerman/hard-lock/releases), unzip it
+anywhere, and run `HardLock.exe`. Windows 10/11 64-bit. No installer, no admin
+needed to run (only to install the optional start-at-logon task).
+
+### "Windows protected your PC" / antivirus warnings
+
+The builds are **not code-signed**, so SmartScreen shows *"Windows protected
+your PC"* on first run — click **More info → Run anyway**. Some antivirus
+engines may also flag it. That's expected for what this app legitimately does:
+it calls `shutdown.exe`, restarts itself when killed, and creates scheduled
+tasks — the same behaviours malware uses. The source is all here if you'd rather
+[build it yourself](#building).
+
 ## How it works
 
 - **Daily active cap** — counts time you're actually at the keyboard (idle time,
@@ -126,3 +149,35 @@ py -3.12 -m unittest discover -s tests
 The safety-critical logic (weakening/cooldown model, effective-time folding,
 dry-run guard, autostart command construction) is covered by the test suite.
 See [PLAN.md](PLAN.md) for the roadmap and remaining phases.
+
+## Uninstalling / turning it off
+
+Hard Lock deliberately resists being closed — a watchdog process restarts it and
+a scheduled task relaunches it every minute. That's the point, but it means
+"just close it" doesn't work. Here's how to actually stop it.
+
+**The sanctioned way — Disarm.** Tray icon → **Disarm**. It keeps running until
+your edit cooldown elapses (24h by default), then both processes exit and stay
+gone. This is intentional: it's what stops a 2 a.m. you from switching it off.
+A commitment ("lock in") blocks even this until the term ends.
+
+**The manual way — remove it now.** In an **administrator** terminal:
+
+```
+schtasks /delete /tn HardLock /f
+schtasks /delete /tn HardLockHeartbeat /f
+taskkill /f /im HardLock.exe
+```
+
+Delete the tasks *first* — otherwise the heartbeat task relaunches it within a
+minute. Then delete the folder you unzipped, and (optionally) your settings and
+history at `%APPDATA%\HardLock`.
+
+**Nothing else is touched.** Hard Lock writes only to `%APPDATA%\HardLock`, the
+two scheduled tasks above, and (if you enabled it) a Startup shortcut. No
+installer, no registry keys, no services, no network access — it never phones
+home or sends any data anywhere.
+
+**Want a version you can just close?** Build the dev flavour with
+`build-dev.bat`. It has a working tray **Quit**, no watchdog, no scheduled
+tasks, and its own separate settings in `%APPDATA%\HardLockDev`.

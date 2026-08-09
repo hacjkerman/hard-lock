@@ -1,6 +1,11 @@
 # Hard Lock for iOS — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+>
+> **Stop at Task 5 and hand off.** Tasks 6–8 require a physical iPhone — Family
+> Controls does nothing in the Simulator, and those tasks are verified by tapping
+> buttons on a device. Tasks 0–5 are pure Swift and fully automatable; roughly 40% of
+> the remaining work is not. See [Amendment J](#j-task-order-and-executor-expectations).
 
 **Goal:** An iPhone app that shields every app after a per-day nightly cutoff, where loosening a rule waits out a cooldown and a fixed-term commitment blocks loosening entirely.
 
@@ -18,10 +23,23 @@
 - **Every rules API takes an explicit `now: Date`** — no hidden `Date()` inside `LockRules`, so tests never sleep.
 - **Day reset is 04:00 by default** (`day_reset_hour`); the logical day rolls then, so 02:00 Saturday still counts as Friday.
 - **Shields fail OPEN:** if config cannot be read or parsed, clear shields rather than strand the phone locked.
-- **Config keys mirror the desktop's `config.json`** so a later sync project can transport the document unchanged: `cutoff_mon`…`cutoff_sun`, `day_reset_hour`, `edit_cooldown_hours`, `pending_changes`, `commit_until`.
+- **Config keys mirror the desktop's `config.json`**: `cutoff_mon`…`cutoff_sun`, `day_reset_hour`, `edit_cooldown_hours`, `pending_changes`, `commit_until`. ⚠️ Key *names* mirror; **values do not round-trip** — see [Amendment C](#c-config-robustness-and-the-desktop-compat-claim). Do not treat this document as transportable to the desktop until that is fixed and tested.
 - **No network, no analytics, no accounts.** Local only.
 - Run tests with `xcodebuild test -scheme HardLock -destination 'platform=iOS Simulator,name=iPhone 15'` (or ⌘U in Xcode).
 - Commit after every task.
+
+> ## ⚠️ Read the Amendments first
+>
+> This plan was reviewed on 2026-08-09. **Tasks 1–5 stand as written.** Tasks 6–10
+> carry defects — one of which can leave a phone permanently shielded — corrected in
+> the [Amendments](#amendments--2026-08-09-review) section at the end. Amendments
+> **A, B, C, D** change code the later tasks build on: apply them before starting
+> Task 6. Affected steps carry an inline `> **Amendment X**` marker.
+>
+> Also note: **Tasks 6–8 cannot be completed without a physical iPhone**, so an
+> agentic executor should stop at Task 5 and hand off ([Amendment J](#j-task-order-and-executor-expectations)).
+> Run **Task 0** ([Amendment F](#f-new-task-0--repo-prep-do-before-task-1)) before Task 1,
+> and consider swapping Tasks 3 and 4.
 
 ## File Structure
 
@@ -37,13 +55,15 @@ ios/
       PendingChangesView.swift    # queued weakenings + time remaining
     Services/
       AuthorizationService.swift  # FamilyControls authorization
-      ShieldController.swift      # ManagedSettings wrapper
       ScheduleManager.swift       # DeviceActivity schedules
+      LockStore.swift             # view model (Task 9)
     HardLock.entitlements
   HardLockKit/                    # shared framework: app + extension
     LockRules.swift               # pure rules engine (no Apple frameworks)
     LockConfig.swift              # Codable config model
     ConfigStore.swift             # App Group JSON persistence
+    ShieldController.swift        # ManagedSettings wrapper (moved here — Amendment A)
+    ShieldReconciler.swift        # makes shield state match the rules (Amendment A)
   HardLockMonitor/                # DeviceActivityMonitor extension
     MonitorExtension.swift
     HardLockMonitor.entitlements
@@ -51,7 +71,9 @@ ios/
     LockRulesCutoffTests.swift
     LockRulesWeakeningTests.swift
     LockRulesCommitmentTests.swift
-    ConfigStoreTests.swift
+    ScheduleWindowTests.swift     # created by Task 8
+    ConfigStoreTests.swift        # also holds LockConfigTests — see Amendment I
+  .gitignore                      # Task 0 — Amendment F
 ```
 
 `LockRules` and `ConfigStore` live in a framework because the extension needs them too — an extension cannot import the app target.
@@ -586,6 +608,11 @@ public extension LockRules {
 Run: `xcodebuild test -scheme HardLock -destination 'platform=iOS Simulator,name=iPhone 15' -only-testing:HardLockKitTests/LockRulesWeakeningTests`
 Expected: FAIL — `cannot find 'isCommitted'`. That member arrives in Task 4; add this temporary stub to `LockRules.swift` to keep the suite green, and delete it in Task 4 Step 3:
 
+> **[Amendment J](#j-task-order-and-executor-expectations):** this stub is avoidable.
+> Task 4 has no dependency on Task 3 — run commitments first and the forward
+> reference disappears, along with the one place the plan's own "the test must fail
+> first" rule gets fudged.
+
 ```swift
 public extension LockRules {
     func isCommitted(now: Date) -> Bool { false }   // replaced in Task 4
@@ -782,6 +809,13 @@ final class ConfigStoreTests: XCTestCase {
 Run: `xcodebuild test -scheme HardLock -destination 'platform=iOS Simulator,name=iPhone 15' -only-testing:HardLockKitTests/ConfigStoreTests`
 Expected: FAIL — `cannot find 'ConfigStore' in scope`.
 
+> **[Amendment C](#c-config-robustness-and-the-desktop-compat-claim):** the store as
+> written below has three defects. `.iso8601` cannot parse the desktop's naive
+> timestamps; one malformed `pending_changes` entry discards the whole document
+> (desktop drops only the bad entry, and tests that it does); and `load()` cannot
+> distinguish a *missing* config from a *corrupt* one, so a parse failure silently
+> resets the user's rules. Fix all three here rather than in Task 9.
+
 - [ ] **Step 3: Implement the store**
 
 Create `ios/HardLockKit/ConfigStore.swift`:
@@ -901,6 +935,14 @@ and that `ios/HardLockMonitor/HardLockMonitor.entitlements` contains the same tw
 
 Also link `HardLockKit` into both targets (**General → Frameworks and Libraries**).
 
+> **[Amendment E](#e-xcode-target-mechanics--three-silent-failure-traps):** "link into
+> both" is not enough — set **Embed & Sign** on the app target and **Do Not Embed** on
+> the extension (app extensions get frameworks from the containing app). Backwards is a
+> dyld crash at extension launch that is invisible from the app side. While you are in
+> the extension's Info.plist, also fix `NSExtensionPrincipalClass` — Task 8 renames the
+> template's class, and if the plist still points at the old name the extension never
+> loads, silently.
+
 - [ ] **Step 3: Verify the kit tests still run inside the project**
 
 Run: `xcodebuild test -scheme HardLock -destination 'platform=iOS Simulator,name=iPhone 15' -only-testing:HardLockKitTests`
@@ -976,6 +1018,10 @@ Build and run on a physical iPhone (Family Controls does not work in the Simulat
 
 - [ ] **Step 7: Commit**
 
+> **[Amendment F](#f-new-task-0--repo-prep-do-before-task-1):** `git add ios/` will
+> commit `xcuserdata/`, `DerivedData/` and `.xcuserstate` unless Task 0 added
+> `ios/.gitignore` first. The repo's root `.gitignore` is Python-only.
+
 ```bash
 git add ios/
 git commit -m "iOS: Xcode project, Family Controls entitlement, authorization flow"
@@ -995,6 +1041,18 @@ git commit -m "iOS: Xcode project, Family Controls entitlement, authorization fl
   - `extension ManagedSettingsStore.Name { static let hardLock: Self }`
 
 `ManagedSettings` cannot be exercised in the Simulator, so this is verified on device rather than by unit test.
+
+> **[Amendment B](#b-all-almost-certainly-shields-hard-lock-itself):** `.all()` does not
+> exempt the app that applies it, so Hard Lock shields itself — making `StatusView`'s
+> locked-out screen unreachable at exactly the moment it is true, and leaving app
+> deletion as the only recourse if something goes wrong mid-lockout. Use
+> `.all(except:)` with the app's own token, or delete that branch of `StatusView` as
+> dead code. Decide; do not leave it implicit.
+>
+> **[Amendment A](#a-reconciliation--nothing-makes-shield-state-match-the-rules):** create
+> this file in `ios/HardLockKit/` rather than `ios/HardLock/Services/`. Both the app and
+> the extension need it, which is the same reason `LockRules` and `ConfigStore` live
+> there — and it removes the target-membership duplication Task 8 Step 6 asks for.
 
 - [ ] **Step 1: Implement the controller**
 
@@ -1247,7 +1305,25 @@ final class MonitorExtension: DeviceActivityMonitor {
 }
 ```
 
+> **[Amendment A](#a-reconciliation--nothing-makes-shield-state-match-the-rules):** replace
+> both callback bodies with `ShieldReconciler.reconcile()`. As written, `intervalDidStart`
+> only ever *adds* shields and `intervalDidEnd` only ever *clears* them, so any missed
+> callback — a phone powered off across the cutoff, or the `stopAll()` in
+> `refreshSchedules()` above — leaves shield state permanently out of step with the
+> rules, with nothing to correct it. `isLockedOut(now:)` already answers the question
+> `cutoffApplies` is being used for here, and answers it correctly even when the
+> interval that should have started never did.
+>
+> If `ShieldController` moved to `HardLockKit` per Amendment B's note, the target
+> membership below is unnecessary — the framework is already linked into both targets.
+
 `ShieldController.swift` must be a member of the `HardLockMonitor` target too — select the file and tick `HardLockMonitor` under **Target Membership**.
+
+> **[Amendment E](#e-xcode-target-mechanics--three-silent-failure-traps):** add to the
+> troubleshooting list below — `NSExtensionPrincipalClass` still pointing at the
+> template's class name after this rename (the most likely cause of a silent failure
+> here), the framework embed setting, and the extension's tight memory budget. The
+> extension is a separate process: check *its* console output, not the app's.
 
 - [ ] **Step 7: Verify on device**
 
@@ -1340,7 +1416,19 @@ public final class LockStore: ObservableObject {
 }
 ```
 
+> **[Amendment A](#a-reconciliation--nothing-makes-shield-state-match-the-rules):** call
+> `reconcile()` from `reload()` after `refreshPending`, and from `persist()` after
+> `refreshSchedules()`. The latter is the fix for the stranded-shield case:
+> `refreshSchedules()` tears down live intervals, and a torn-down interval never
+> delivers `intervalDidEnd`.
+
 - [ ] **Step 2: Implement `StatusView`**
+
+> **[Amendment D](#d-two-defects-in-the-ui-layer):** `ConfigStore.shared()!` crashes on
+> launch whenever the App Group is misconfigured — the single most common setup
+> mistake, and every SwiftUI preview. Task 5 made `shared()` optional deliberately;
+> do not throw that away. Also see [Amendment K](#k-ui-bugs-to-fix-in-place) for the
+> `@MainActor` initialiser and the "0 days left" formatting.
 
 Create `ios/HardLock/Views/StatusView.swift`:
 
@@ -1406,6 +1494,16 @@ struct StatusView: View {
 ```
 
 - [ ] **Step 3: Implement `CutoffEditorView`**
+
+> **[Amendment D](#d-two-defects-in-the-ui-layer):** the `DatePicker` binding below
+> calls `setCutoff` on *every wheel tick*, and each call runs
+> `apply → persist → save + stopAll() + up to 7 startMonitoring`. One scroll is dozens
+> of full schedule teardowns, each briefly unregistering enforcement. Bind to local
+> `@State` and commit on dismiss.
+>
+> **[Amendment G](#g-rules-model-parity-gaps-the-plan-does-not-acknowledge):** seven bare
+> pickers cannot express "no cutoff" — they render `nil` as 23:30 and can never write it
+> back, though the model supports `nil` end to end. Add a per-day toggle.
 
 Create `ios/HardLock/Views/CutoffEditorView.swift`:
 
@@ -1584,6 +1682,16 @@ git commit -m "iOS: status, cutoff editor, commitment and pending-changes screen
 
 - [ ] **Step 1: Write the iOS README**
 
+> **Amendments [G](#g-rules-model-parity-gaps-the-plan-does-not-acknowledge),
+> [E](#e-xcode-target-mechanics--three-silent-failure-traps),
+> [H](#h-commitment-durability--weaker-than-advertised):** the Honest Limitations
+> section below is missing three things that belong in it — deleting the app also
+> **resets an active commitment to zero**, not just the shields; a free personal-team
+> provisioning profile **expires after 7 days**, which matters a lot for an app whose
+> value is unattended nightly enforcement; and a **cooldown that expires does nothing
+> until you next open the app**. An app that leads with honesty about its limits should
+> not omit the three that bite hardest.
+
 Create `ios/README.md`:
 
 ```markdown
@@ -1645,6 +1753,11 @@ Set a real cutoff a few minutes out, force-quit the app, and leave the phone alo
 - Shields clear at `day_reset_hour`.
 - Rebooting the phone before the cutoff still results in shields applying (schedules survive restarts).
 
+> **[Amendment L](#l-verification-additions):** this tests a reboot *before* the cutoff.
+> Also test the phone powered **off across** the cutoff and booted before the day reset —
+> iOS does not replay the missed `intervalDidStart`, so without Amendment A that night
+> never locks, and it is the case a user will actually hit. Two more cases listed there.
+
 - [ ] **Step 5: Commit**
 
 ```bash
@@ -1661,10 +1774,336 @@ git commit -m "iOS: documentation and usage notes"
 - [ ] Later cutoff queues; earlier cutoff applies immediately; commitment rejects the later one.
 - [ ] Revoked Screen Time access produces a visible warning rather than silent no-op.
 - [ ] Corrupt `config.json` in the App Group container results in *cleared* shields, never a stuck lockout.
+- [ ] Phone powered off across the cutoff, booted before the day reset: shields apply anyway ([Amendment A](#a-reconciliation--nothing-makes-shield-state-match-the-rules)).
+- [ ] A cutoff edited mid-lockout still clears at the day reset — the `stopAll()` path ([Amendment A](#a-reconciliation--nothing-makes-shield-state-match-the-rules)).
+- [ ] Corrupting only the `pending_changes` block leaves the rest of the rules intact ([Amendment C](#c-config-robustness-and-the-desktop-compat-claim)).
+- [ ] Delete and reinstall during a commitment: the commitment survives, or `ios/README.md` says it does not ([Amendment H](#h-commitment-durability--weaker-than-advertised)).
 
 ## Notes for the implementer
 
 - **Family Controls needs a real device.** The Simulator silently does nothing, so anything touching `ManagedSettings`/`DeviceActivity` is verified on device; that is why Tasks 6–8 have manual verification steps instead of unit tests. All decision logic lives in `LockRules`, which *is* unit-tested.
 - **`LockRules` must stay framework-free.** If you find yourself importing `ManagedSettings` there, the logic belongs in a service instead.
-- **Fail open, always.** The desktop app fails closed (shut down if unsure) because a missed shutdown is cheap. On a phone a stuck lockout is expensive, so every uncertain path clears shields.
+- **Fail open, always.** The desktop app fails closed (shut down if unsure) because a missed shutdown is cheap. On a phone a stuck lockout is expensive, so every uncertain path clears shields. ⚠️ Failing open on *unreadable config* is not enough — see [Amendment A](#a-reconciliation--nothing-makes-shield-state-match-the-rules). The plan's fail-open guard only runs when a callback arrives; the stuck lockouts all come from callbacks that never do.
+- **Reconcile, don't accumulate.** Shield state is derived from the rules, never from a history of callbacks. Any code path that adds a shield without a matching path that re-derives it is a bug.
 - If a task's test does not fail at Step 2, the test is not exercising new behaviour — fix the test before writing the implementation.
+
+---
+
+# Amendments — 2026-08-09 review
+
+Tasks 1–5 stand as written. Everything below either corrects a defect in Tasks 6–10
+or adds work the plan omits. Amendments are lettered; affected steps carry an inline
+`> **Amendment X**` marker pointing here.
+
+Apply **A, B, C, D** before starting Task 6 — each one changes code the later tasks build on.
+
+## A. Reconciliation — nothing makes shield state match the rules
+
+**The defect.** Every shield transition is edge-triggered by a `DeviceActivity`
+callback. There is no path anywhere that asks "given the rules, should the phone be
+shielded *right now*?" Three reachable sequences leave reality and rules disagreeing,
+and none of them self-heal:
+
+1. `refreshSchedules()` calls `stopAll()` before re-registering (Task 8 Step 5).
+   `stopMonitoring` on an activity that is mid-interval does **not** deliver
+   `intervalDidEnd`, so shields applied by that interval are stranded until some
+   unrelated night's interval happens to end. Reached through the plan's own
+   normal edit path.
+2. A phone powered off across the cutoff and booted before the day reset: iOS does
+   not replay the missed `intervalDidStart`, so that night simply never locks.
+3. A dropped or throttled callback — `DeviceActivity` does not guarantee delivery.
+
+The fail-open guard in `intervalDidStart` does not cover any of these; it only runs
+when a callback *does* arrive. Case 1 produces exactly the stuck lockout the plan
+names as its worst outcome.
+
+**The fix.** One reconcile entry point, called from every place that could have
+missed a transition. It replaces `cutoffApplies` as the load-bearing check —
+`isLockedOut(now:)` already answers the same question and answers it correctly even
+when the interval that *should* have started never did.
+
+Move `ShieldController.swift` into `HardLockKit/` (this also removes the
+target-membership duplication Task 8 Step 6 asks for), and add:
+
+```swift
+// ios/HardLockKit/ShieldReconciler.swift
+import Foundation
+
+/// Makes actual shield state match what the rules say, regardless of which
+/// callbacks did or did not arrive. Every uncertain path clears.
+public struct ShieldReconciler {
+    private let shields: ShieldController
+    private let store: ConfigStore
+
+    public init(shields: ShieldController = ShieldController(), store: ConfigStore) {
+        self.shields = shields
+        self.store = store
+    }
+
+    public func reconcile(now: Date = Date()) {
+        // Fail OPEN: unreadable config must never strand the phone shielded.
+        guard let config = try? store.loadStrict() else { shields.clear(); return }
+        if LockRules(config: config).isLockedOut(now: now) {
+            shields.shieldEverything()
+        } else {
+            shields.clear()
+        }
+    }
+}
+```
+
+Call `reconcile()` from **all five** of:
+
+- `MonitorExtension.intervalDidStart` — replacing the `cutoffApplies` guard entirely.
+- `MonitorExtension.intervalDidEnd` — replacing the unconditional `shields.clear()`.
+  Clearing unconditionally is safe *today* only because every registered interval
+  shares `dayResetHour` as its end; reconcile removes that hidden coupling.
+- `LockStore.reload()`, after `refreshPending`.
+- `LockStore.persist()`, after `refreshSchedules()` — this is the fix for case 1.
+- `AuthorizationService` once status becomes `.approved`.
+
+`cutoffApplies` stays (it is tested and cheap) but is no longer what decides whether
+to shield. `distinctCutoffTimes` is still required for schedule registration.
+
+**Worth verifying on device:** if `startMonitoring` called while already inside an
+interval fires `intervalDidStart` immediately, case 2 is covered by registration
+alone and reconcile becomes belt-and-braces. Do not assume it; check.
+
+## B. `.all()` almost certainly shields Hard Lock itself
+
+Task 7 sets `applicationCategories = .all()` with no exemption. The app applying the
+shield is not exempt from it, which means:
+
+- `StatusView`'s "Locked out until 4:00 AM" is a screen that by construction can
+  never be seen — the only time it is true is the only time the app cannot open.
+- A bug during lockout leaves deleting the app as the sole recourse.
+
+Use `.all(except:)` with the app's own `ApplicationToken`, or decide deliberately
+that the app locks itself out too and delete the locked-out branch of `StatusView`
+as dead code. Either is defensible; the current state is neither.
+
+## C. Config robustness, and the desktop-compat claim
+
+**The claim in Global Constraints — that the document transports to the desktop
+unchanged — is false as specified.** Key *names* mirror. Values do not:
+
+- Desktop writes naive local timestamps via `datetime.isoformat()`:
+  `"2026-08-09T12:34:56.789012"` — no offset, microseconds
+  (`hard_lock/config.py:406`). Swift's `.iso8601` strategy rejects both.
+- `PendingChange.value` is typed `String?`, but desktop queues `daily_cap_minutes`
+  as an `Int`.
+
+Either mismatch throws, and `load()` swallows the throw into `.default` — a silent
+reset of the user's entire rule set, presented as a safety feature.
+
+**Also a straight regression against desktop:** `Codable` is all-or-nothing, so one
+malformed `effective_at` discards *everything*. Desktop drops just the bad entry and
+keeps the rest, and has two tests proving it
+(`test_malformed_pending_missing_effective_at_dropped`,
+`test_malformed_pending_bad_isoformat_dropped` in `tests/test_config.py`).
+
+**The fix, three parts:**
+
+1. Decode `pendingChanges` with a tolerant custom `init(from:)` that skips entries
+   it cannot parse rather than failing the document.
+2. Use a date strategy that accepts both offset-bearing and naive timestamps, with
+   fractional seconds optional. `.custom` with a pair of `ISO8601DateFormatter`s, or
+   `.formatted` with `yyyy-MM-dd'T'HH:mm:ss[.SSSSSS][ZZZZZ]` handling.
+3. Distinguish **missing** from **corrupt**. Missing → `.default`, correct.
+   Corrupt → `.default` for the extension (fail open) but a *visible error* in the
+   app, never a silent overwrite of a file that still holds the user's rules. Give
+   `ConfigStore` a `load() -> (LockConfig, didFallBack: Bool)` or keep `loadStrict`
+   as the app's path and surface the throw in `lastError`.
+
+Then either back the compat claim with a round-trip test against a real desktop
+`config.json`, or strike it from Global Constraints. It is currently load-bearing
+for a future sync project and untrue.
+
+## D. Two defects in the UI layer
+
+**`ConfigStore.shared()!` (Task 9 Step 2).** Task 5 deliberately returns `nil` when
+the App Group is unavailable; Task 9 force-unwraps it inside a `@StateObject`
+initializer. That is a crash on launch for the single most common setup mistake, and
+in every SwiftUI preview. Thread the optional through, or fail to a dedicated
+"App Group misconfigured" view.
+
+**The cutoff editor writes on every wheel tick (Task 9 Step 3).** The `DatePicker`
+binding calls `setCutoff` on each change, and each call runs
+`apply → persist → save + stopAll() + up to 7 startMonitoring`. Scrolling one picker
+means dozens of full schedule teardowns, each briefly unregistering enforcement — and
+each one is a live instance of amendment A case 1. Bind to local `@State` and commit
+on `onDisappear` or an explicit Save, not continuously.
+
+## E. Xcode target mechanics — three silent-failure traps
+
+Task 6 omits all three, and Task 8 Step 7's troubleshooting list names none of them.
+Each fails invisibly, with "nothing happens" as the only symptom.
+
+1. **Principal class.** The Device Activity Monitor Extension template generates
+   `DeviceActivityMonitorExtension` and points the extension's Info.plist
+   `NSExtensionPrincipalClass` at it. Task 8 Step 6 renames the class to
+   `MonitorExtension`. Update `NSExtensionPrincipalClass` to the module-qualified
+   name (`$(PRODUCT_MODULE_NAME).MonitorExtension`) or the extension never loads.
+   **This is the most likely cause of a silent Task 8.**
+2. **Embed vs link.** Task 6 Step 2 says to link `HardLockKit` into both targets
+   without distinguishing *Embed & Sign* (app) from *Do Not Embed* (extension —
+   app extensions get frameworks from the containing app). Backwards is a dyld
+   crash at extension launch, invisible from the app.
+3. **Memory budget.** `DeviceActivityMonitor` extensions run under a very tight
+   limit. Decoding a small JSON and setting two properties should fit, but measure
+   it rather than assume — exceeding it is a silent kill.
+
+Add to Task 8 Step 7's troubleshooting list: principal class, embed setting, and
+"the extension is a separate process — check its own console output, not the app's."
+
+**Provisioning.** A free personal-team profile expires after 7 days. For an app whose
+entire value is unattended nightly enforcement, that belongs in `ios/README.md`
+alongside the other honest limitations, not discovered in week two.
+
+## F. New Task 0 — repo prep (do before Task 1)
+
+- [ ] **Step 1: Add `ios/.gitignore`**
+
+The repo's `.gitignore` is Python-only. Task 6 Step 7 runs `git add ios/`, which
+will commit `xcuserdata/`, `DerivedData/`, `*.xcuserstate` and `.DS_Store`.
+
+```
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+.DS_Store
+```
+
+- [ ] **Step 2: Decide how `HardLockKit` builds for CI**
+
+There is no `.github/` in this repo — nothing runs the Python suite automatically
+either. Tasks 1–5 are pure Swift with no Apple-framework dependency, so they can
+build and test under SwiftPM without Xcode project surgery. Either add a
+`Package.swift` for `HardLockKit` now, or record the decision not to and accept that
+the rules engine is only ever tested by hand.
+
+## G. Rules-model parity gaps the plan does not acknowledge
+
+Each is a deliberate-looking omission with no stated decision. Decide explicitly.
+
+- **No way to cancel a queued change.** Desktop exposes `cancel_pending`;
+  `PendingChangesView` is read-only. It is technically reachable — scrolling the
+  picker back to the current value hits the `newValue == oldValue && queued != nil`
+  branch and drops the queue — but that is undiscoverable, and it reports
+  "Applied now." Add an explicit cancel.
+- **Do NOT port `activate_pending`.** Desktop has a two-click, red-styled
+  "Skip cooldown?" override (`hard_lock/webui/settings.js:64`). It is safe there only
+  because `commit()` clears the queue first, so no pending entry survives into a
+  commitment. Omitting it strengthens the model; say so rather than leaving it
+  looking accidental.
+- **Cooldown expiry requires opening the app.** Desktop runs `refresh_pending` on
+  every status poll specifically so a change lands "the moment it comes due — not
+  only after the next restart" (`hard_lock/config.py:158`). The extension calls
+  `loadStrict()` and never refreshes, so on iOS the cooldown expires and nothing
+  happens until launch. Defensible — friction is the point — but document it in
+  `ios/README.md` and in `PendingChangesView`.
+- **No way to clear a cutoff.** The model supports `nil` end to end
+  (`withCutoff(nil:)`, `cutoffWeakens`, `distinctCutoffTimes`, "No cutoff today").
+  The editor is seven bare `DatePicker`s that render `nil` as 23:30 and can never
+  write it back. Add a per-day toggle.
+- **Unknown keys report false success.** `setting(_:forKey:)` returns `self`
+  unchanged for anything outside `weekdayKeys`, but `apply` appends to `applied`
+  regardless — so an `edit_cooldown_hours` or `day_reset_hour` edit reports
+  "Applied now" and does nothing. Latent today (no UI reaches them); make `apply`
+  skip unknown keys, or add them to `rejected`.
+
+## H. Commitment durability — weaker than advertised
+
+`commit_until` lives in a JSON file in the App Group container, so deleting and
+reinstalling does not merely remove the shields (as `ios/README.md` says) — it
+**resets a year-long commitment to zero**. That is the app's strongest claim, and
+the one the README does not mention losing.
+
+Keychain items survive app deletion. Mirror `commit_until` there and take
+`max(file, keychain)` on load: reinstalling then becomes a no-op against
+commitments, while everything else stays in the shared JSON where the extension can
+read it. Cheap, and squarely in the spirit of the honest-limitations section — which
+should state the current behaviour either way.
+
+## I. Test additions
+
+The suite is 27 tests (21 for the rules engine) against 63 in the desktop's
+`tests/test_config.py`. Most of that gap is legitimately out of scope — caps,
+warnings, game deferral, disarm. These are not:
+
+- [ ] A tightening cancels a queued weakening (implemented Task 3 Step 3, untested).
+      This is the "I changed my mind" path, and the one users hit.
+- [ ] Re-applying the current value cancels a queued change — desktop tests this
+      explicitly (`test_reapplying_current_value_still_cancels_a_pending_change`).
+- [ ] A malformed `effective_at` drops only that entry, keeping the rest (amendment C).
+- [ ] A malformed `"HH:mm"` disables enforcement for that day, silently — the one
+      fail-open case with no user-visible signal.
+- [ ] `"04:00"` with a 04:00 reset maps to `logicalCutoffMinute == 0` and shields the
+      entire logical day. Self-consistent and reachable from the picker with no guard;
+      pin the behaviour before someone "fixes" it.
+- [ ] `apply` with multiple keys in one call — the API takes a dictionary and is only
+      ever tested with one entry.
+- [ ] `resetDate` directly.
+- [ ] DST: a 01:30 cutoff on the spring-forward night does not exist, and
+      `DeviceActivitySchedule` takes bare `DateComponents` in device-local time.
+      Pin what happens.
+
+Housekeeping: `ConfigStoreTests.swift` contains `LockConfigTests` (file/class
+mismatch); the File Structure block omits `ScheduleWindowTests.swift` and
+`LockStore.swift`, both created by later tasks; `testCalendar` is a global `var` that
+should be `let` (global `var` is lazily initialised and not safe under parallel test
+execution).
+
+## J. Task order and executor expectations
+
+**Swap Tasks 3 and 4.** Commitments have no dependency on the weakening path, so
+running them first removes the throwaway `isCommitted` stub in Task 3 Step 4
+entirely — along with the one place the plan's own "the test must fail first" rule
+gets fudged.
+
+**Tasks 6–8 cannot be executed by the agentic worker this plan addresses.** The
+header prescribes subagent-driven development, but roughly 40% of the work is gated
+on tapping buttons on a physical iPhone — Family Controls genuinely requires one.
+State this in the header so an executor stops cleanly at Task 5 and hands off,
+rather than discovering it at Task 6 Step 6.
+
+## K. UI bugs to fix in place
+
+- `PendingChangesView` renders "Activates in 23 hours from now" — `.relative` already
+  emits "in 23 hours".
+- `StatusView` shows `Int(remaining / 86400)` days, so the last 23 hours of a
+  commitment read "0 days left".
+- `@StateObject private var lock = LockStore(...)` calls a `@MainActor` initialiser
+  from a non-isolated stored-property initialiser: a concurrency warning under Swift
+  5.9, an error under Swift 6 strict concurrency. Move it into `init()` via
+  `_lock = StateObject(wrappedValue:)`, or mark the view `@MainActor`.
+- `message` in `CutoffEditorView` is never cleared, so "Queued" persists over later
+  unrelated edits.
+- `CommitmentView` calls `Date()` directly in `body`, so the remaining-time text
+  never refreshes.
+
+## L. Verification additions
+
+Add to Task 10 Step 4 and to Final verification:
+
+- [ ] **Power the phone off across the cutoff** and boot it before the day reset.
+      Step 4 currently tests rebooting *before* the cutoff only. iOS will not replay
+      the missed `intervalDidStart`, so without amendment A this night never locks —
+      and it is the case a user will actually hit.
+- [ ] Edit a cutoff **while shielded**, then confirm shields still clear at the day
+      reset (the `stopAll()` path from amendment A case 1). Requires amendment B
+      first, or the app cannot be opened to perform the edit.
+- [ ] Corrupt only the `pending_changes` block of `config.json`; confirm the rest of
+      the rules survive (amendment C).
+- [ ] Delete and reinstall during an active commitment; confirm the commitment
+      survives (amendment H) or document that it does not.
+
+## Revised priority
+
+1. **A** — reconciliation. The only defect that can strand a phone.
+2. **B** — shield scope. Decide before building UI that is unreachable during lockout.
+3. **C** — decode robustness. Silent config reset is data loss.
+4. **D** — the crash and the write storm.
+5. **E**, **F** — cheap, and each costs an hour of blind debugging if missed.
+6. **G**–**L** — parity, tests, polish.

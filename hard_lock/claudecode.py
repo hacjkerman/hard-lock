@@ -22,16 +22,36 @@ import json
 import time
 from pathlib import Path
 
+from . import league
+
 # How far back a transcript write still counts as "working".
 DEFAULT_WINDOW_SECONDS = 300.0
 # An unfinished tool call holds the shutdown for at most this long, so a crashed
 # session (tool_use never answered) can't defer forever.
 IN_FLIGHT_MAX_SECONDS = 6 * 3600.0
+# Claude Code must actually be running for any of it to count. Without this a
+# stale transcript (or a session you closed) kept holding the shutdown long
+# after Claude was gone.
+DEFAULT_PROCESS_NAMES = ["claude.exe"]
 _TAIL_BYTES = 65536
 
 
 def _projects_dir() -> Path:
     return Path.home() / ".claude" / "projects"
+
+
+def is_claude_running(process_names=None) -> bool:
+    """True if a Claude Code process exists at all. Fails safe (False) on error,
+    so a detection glitch releases the shutdown rather than holding it."""
+    names = [n.lower() for n in (process_names if process_names is not None
+                                 else DEFAULT_PROCESS_NAMES) if n]
+    if not names:
+        return False
+    try:
+        running = league.running_process_names()
+    except Exception:
+        return False
+    return any(n in running for n in names)
 
 
 def _last_entry(path: Path):
@@ -70,9 +90,18 @@ def _has_unfinished_tool_call(path: Path) -> bool:
 
 
 def is_claude_active(window_seconds: float = DEFAULT_WINDOW_SECONDS,
-                     projects_dir=None) -> bool:
-    """True while any Claude Code session is actively working."""
+                     projects_dir=None, process_names=None,
+                     require_process: bool = True) -> bool:
+    """True while any Claude Code session is actively working.
+
+    Two conditions must BOTH hold: Claude is running at all, and some session is
+    mid-work (a recent transcript append, or an unanswered tool call). Closing
+    Claude therefore releases the shutdown immediately, instead of waiting out
+    the window or a stale in-flight tool call.
+    """
     try:
+        if require_process and not is_claude_running(process_names):
+            return False  # nothing running -> nothing to wait for
         base = Path(projects_dir) if projects_dir is not None else _projects_dir()
         if not base.exists():
             return False

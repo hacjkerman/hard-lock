@@ -4,6 +4,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from hard_lock import claudecode
 
@@ -28,7 +29,10 @@ class ClaudeCodeTestCase(unittest.TestCase):
         self.base.mkdir(parents=True)
 
     def active(self, window=300.0):
-        return claudecode.is_claude_active(window, projects_dir=self.base)
+        # require_process=False isolates the transcript logic; the process gate
+        # has its own tests below.
+        return claudecode.is_claude_active(window, projects_dir=self.base,
+                                           require_process=False)
 
     # ───────── recent-write window ─────────
     def test_recent_write_is_active(self):
@@ -96,6 +100,38 @@ class ClaudeCodeTestCase(unittest.TestCase):
         _write(self.base / "proj" / "s1.jsonl", [USER_TOOL_RESULT], age_seconds=600)
         self.assertFalse(self.active(window=300))   # outside 5 min
         self.assertTrue(self.active(window=1200))   # inside 20 min
+
+    # ───────── the process gate ─────────
+    def test_no_claude_process_means_idle_even_with_fresh_transcript(self):
+        # The reported bug: Claude closed, but a fresh transcript kept holding.
+        _write(self.base / "proj" / "s1.jsonl", [ASSISTANT_TEXT])
+        with mock.patch("hard_lock.league.running_process_names",
+                        return_value={"explorer.exe"}):
+            self.assertFalse(claudecode.is_claude_active(projects_dir=self.base))
+
+    def test_no_claude_process_releases_an_in_flight_tool_call(self):
+        # A session that died mid-tool-call must not hold for 6h once Claude is gone.
+        _write(self.base / "proj" / "s1.jsonl", [ASSISTANT_TOOL_USE], age_seconds=1800)
+        with mock.patch("hard_lock.league.running_process_names",
+                        return_value={"explorer.exe"}):
+            self.assertFalse(claudecode.is_claude_active(projects_dir=self.base))
+
+    def test_running_claude_with_fresh_transcript_holds(self):
+        _write(self.base / "proj" / "s1.jsonl", [ASSISTANT_TEXT])
+        with mock.patch("hard_lock.league.running_process_names",
+                        return_value={"claude.exe", "explorer.exe"}):
+            self.assertTrue(claudecode.is_claude_active(projects_dir=self.base))
+
+    def test_running_claude_but_idle_transcripts_releases(self):
+        _write(self.base / "proj" / "s1.jsonl", [USER_TOOL_RESULT], age_seconds=3600)
+        with mock.patch("hard_lock.league.running_process_names",
+                        return_value={"claude.exe"}):
+            self.assertFalse(claudecode.is_claude_active(projects_dir=self.base))
+
+    def test_process_detection_failure_fails_safe(self):
+        _write(self.base / "proj" / "s1.jsonl", [ASSISTANT_TEXT])
+        with mock.patch("hard_lock.league.running_process_names", side_effect=OSError):
+            self.assertFalse(claudecode.is_claude_active(projects_dir=self.base))
 
 
 if __name__ == "__main__":

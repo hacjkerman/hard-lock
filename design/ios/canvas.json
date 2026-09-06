@@ -1,0 +1,20 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html",              "x": 0,    "y": 0,    "w": 393, "h": 852, "title": "Status — armed" },
+    { "file": "StatusLocked.dc.html",      "x": 473,  "y": 0,    "w": 393, "h": 852, "title": "Status — locked out" },
+    { "file": "ShieldScreen.dc.html",      "x": 946,  "y": 0,    "w": 393, "h": 852, "title": "Shield screen" },
+    { "file": "CutoffEditor.dc.html",      "x": 0,    "y": 1010, "w": 393, "h": 852, "title": "Cutoff times" },
+    { "file": "PendingChanges.dc.html",    "x": 473,  "y": 1010, "w": 393, "h": 852, "title": "Pending changes" },
+    { "file": "Commitment.dc.html",        "x": 946,  "y": 1010, "w": 393, "h": 852, "title": "Commitment — confirm" },
+    { "file": "FirstRun.dc.html",          "x": 0,    "y": 2020, "w": 393, "h": 852, "title": "First run" },
+    { "file": "PermissionMissing.dc.html", "x": 473,  "y": 2020, "w": 393, "h": 852, "title": "Access revoked" },
+    { "file": "StatusDark.dc.html",        "x": 946,  "y": 2020, "w": 393, "h": 852, "title": "Status — dark" }
+  ],
+  "annotations": [
+    { "id": "note-language", "x": 0, "y": -210, "w": 500, "text": "Carried over from the Windows app: warm neutral base, traffic-light states, red as the product accent, and the light-weight tabular countdown from the shutdown takeover.\n\nEverything structural is iOS: large titles, inset grouped lists, 52pt rows, system toggles." },
+    { "id": "note-shield", "x": 946, "y": -210, "w": 393, "text": "The one surface with no desktop equivalent. iOS draws this itself via ShieldConfiguration — you get an icon, a title, a subtitle and up to two buttons. Everything here stays inside that budget." },
+    { "id": "note-selfshield", "x": 473, "y": -210, "w": 393, "text": "Open question: if shielding uses .all() the app shields itself, and this screen can never be seen. Designed on the assumption we exempt Hard Lock's own token." },
+    { "id": "note-nocap", "x": 0, "y": 950, "w": 500, "text": "No daily-cap screen: the iOS spec drops the cap deliberately, so there is no REMAINING/USED pair to carry over. The cutoff is the whole model." }
+  ],
+  "launch": { "view": "canvas" }
+}

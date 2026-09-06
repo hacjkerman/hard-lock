@@ -1,0 +1,86 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #c42b1c; } a:hover { color: #a32316; }
+    .num { font-variant-numeric: tabular-nums; }
+    .micro { font-size: 11px; font-weight: 590; letter-spacing: 0.6px; text-transform: uppercase; }
+  </style>
+</helmet>
+<div style="width: 393px; height: 852px; background: #efedea; color: #1a1a1a; display: flex; flex-direction: column; overflow: hidden;">
+
+  <div style="padding: 58px 16px 6px 16px; display: flex; align-items: center; gap: 4px;">
+    <svg width="11" height="18" viewBox="0 0 8 13" fill="none" stroke="#c42b1c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 1.5 L1.5 6.5 L6.5 11.5"></path></svg>
+    <div style="font-size: 17px; color: #c42b1c;">Hard Lock</div>
+  </div>
+  <div style="padding: 4px 20px 10px 20px;">
+    <div style="font-size: 34px; font-weight: 700; letter-spacing: -0.6px;">Cutoff times</div>
+  </div>
+
+  <div style="padding: 8px 16px 0 16px; display: flex; flex-direction: column; gap: 8px;">
+    <div style="background: #ffffff; border-radius: 14px; overflow: hidden;">
+
+      <sc-for list="{{days}}" as="d" hint-placeholder-count="7">
+        <div style="display: flex; align-items: center; gap: 12px; padding: 0 16px; height: 54px;">
+          <div style="font-size: 17px; width: 96px; color: {{d.labelColor}};">{{d.name}}</div>
+          <div style="flex-grow: 1;"></div>
+          <div class="num" style="font-size: 17px; font-weight: 500; padding: 5px 11px; border-radius: 8px; background: {{d.timeBg}}; color: {{d.timeColor}};">{{d.time}}</div>
+          <div style="width: 51px; height: 31px; border-radius: 16px; background: {{d.trackBg}}; display: flex; align-items: center; padding: 2px; justify-content: {{d.knobSide}};">
+            <div style="width: 27px; height: 27px; border-radius: 14px; background: #ffffff; box-shadow: 0 2px 5px rgba(0,0,0,0.18);"></div>
+          </div>
+        </div>
+        <sc-if value="{{d.rule}}" hint-placeholder-val="{{true}}">
+          <div style="height: 1px; background: rgba(0,0,0,0.07); margin-left: 16px;"></div>
+        </sc-if>
+      </sc-for>
+
+    </div>
+
+    <div style="font-size: 13px; color: rgba(0,0,0,0.45); line-height: 1.45; padding: 2px 16px 0 16px; text-wrap: pretty;">
+      A time after midnight belongs to that night &mdash; Friday 01:30 means 1:30&nbsp;am Saturday.
+    </div>
+  </div>
+
+  <div style="padding: 22px 16px 0 16px; display: flex; flex-direction: column; gap: 8px;">
+    <div style="background: rgba(184,134,11,0.12); border-radius: 14px; padding: 14px 16px; display: flex; gap: 11px; align-items: flex-start;">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#8a6508" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px;">
+        <path d="M12 3v9l5 3"></path><circle cx="12" cy="12" r="9"></circle>
+      </svg>
+      <div style="display: flex; flex-direction: column; gap: 3px;">
+        <div style="font-size: 15px; font-weight: 590; color: #8a6508;">Saturday is queued</div>
+        <div style="font-size: 13.5px; color: rgba(0,0,0,0.6); line-height: 1.4;">Moving it later takes effect in 23h 41m. Earlier would apply now.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":393,"height":852}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const on  = { timeBg: 'rgba(196,43,28,0.08)', timeColor: '#c42b1c', trackBg: '#107c41', knobSide: 'flex-end', labelColor: '#1a1a1a' };
+    const off = { timeBg: 'transparent', timeColor: 'rgba(0,0,0,0.3)', trackBg: 'rgba(0,0,0,0.16)', knobSide: 'flex-start', labelColor: 'rgba(0,0,0,0.4)' };
+    const rows = [
+      { name: 'Monday',    time: '23:30', state: on },
+      { name: 'Tuesday',   time: '23:30', state: on },
+      { name: 'Wednesday', time: '23:30', state: on },
+      { name: 'Thursday',  time: '23:30', state: on },
+      { name: 'Friday',    time: '01:30', state: on },
+      { name: 'Saturday',  time: '01:30', state: on },
+      { name: 'Sunday',    time: '22:00', state: off },
+    ];
+    return {
+      days: rows.map((r, i) => ({ name: r.name, time: r.time, rule: i < rows.length - 1, ...r.state })),
+    };
+  }
+}
+</script>
+</body>
+</html>

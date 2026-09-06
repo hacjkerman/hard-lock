@@ -1,0 +1,70 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #ff99a4; } a:hover { color: #ffb3bb; }
+    .num { font-variant-numeric: tabular-nums; }
+    .micro { font-size: 11px; font-weight: 590; letter-spacing: 0.6px; text-transform: uppercase; }
+  </style>
+</helmet>
+<div style="width: 393px; height: 852px; background: #141312; color: #ffffff; display: flex; flex-direction: column; overflow: hidden;">
+
+  <div style="padding: 62px 20px 8px 20px;">
+    <div style="font-size: 34px; font-weight: 700; letter-spacing: -0.6px; line-height: 1.1;">Hard Lock</div>
+  </div>
+
+  <div style="padding: 16px 16px 0 16px; display: flex; flex-direction: column; gap: 22px; flex-grow: 1;">
+
+    <div style="background: #232120; border-radius: 14px; padding: 26px 20px 22px 20px; display: flex; flex-direction: column; gap: 16px; border: 1px solid rgba(255,153,164,0.22);">
+      <div style="display: flex; align-items: center; gap: 9px;">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#ff99a4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="4" y="10" width="16" height="11" rx="2.5"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path>
+        </svg>
+        <div class="micro" style="color: #ff99a4;">Locked out</div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <div class="num" style="font-size: 76px; font-weight: 200; letter-spacing: -3.5px; line-height: 0.95; color: #ff99a4;">3:47</div>
+        <div style="font-size: 15px; color: rgba(255,255,255,0.62);">until the day resets at 04:00</div>
+      </div>
+      <div style="height: 1px; background: rgba(255,255,255,0.08);"></div>
+      <div style="font-size: 14px; color: rgba(255,255,255,0.62); line-height: 1.45;">
+        Every app is shielded. Nothing can be loosened while the lockout is running &mdash; not the cutoff, not the cooldown.
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 8px;">
+      <div class="micro" style="color: rgba(255,255,255,0.42); padding-left: 16px;">Still available</div>
+      <div style="background: #232120; border-radius: 14px; overflow: hidden;">
+        <div style="display: flex; align-items: center; gap: 12px; padding: 0 16px; height: 52px;">
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#6ccb5f" stroke-width="1.8" stroke-linecap="round">
+            <circle cx="12" cy="12" r="9"></circle><path d="M8.5 12.5l2.5 2.5 4.5-5"></path>
+          </svg>
+          <div style="font-size: 17px; flex-grow: 1;">Tighten a cutoff</div>
+          <svg width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="rgba(255,255,255,0.28)" stroke-width="2" stroke-linecap="round"><path d="M1.5 1.5 L6.5 6.5 L1.5 11.5"></path></svg>
+        </div>
+        <div style="height: 1px; background: rgba(255,255,255,0.08); margin-left: 49px;"></div>
+        <div style="display: flex; align-items: center; gap: 12px; padding: 0 16px; height: 52px;">
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#6ccb5f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"></path>
+          </svg>
+          <div style="font-size: 17px; flex-grow: 1;">Extend a commitment</div>
+          <svg width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="rgba(255,255,255,0.28)" stroke-width="2" stroke-linecap="round"><path d="M1.5 1.5 L6.5 6.5 L1.5 11.5"></path></svg>
+        </div>
+      </div>
+      <div style="font-size: 13px; color: rgba(255,255,255,0.42); line-height: 1.4; padding: 2px 16px 0 16px;">
+        Tightening always works. Loosening is what waits.
+      </div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

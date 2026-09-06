@@ -1,0 +1,64 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #c42b1c; } a:hover { color: #a32316; }
+    .num { font-variant-numeric: tabular-nums; }
+    .micro { font-size: 11px; font-weight: 590; letter-spacing: 0.6px; text-transform: uppercase; }
+  </style>
+</helmet>
+<div style="width: 393px; height: 852px; background: #efedea; color: #1a1a1a; display: flex; flex-direction: column; overflow: hidden;">
+
+  <div style="padding: 62px 20px 8px 20px;">
+    <div style="font-size: 34px; font-weight: 700; letter-spacing: -0.6px; line-height: 1.1;">Hard Lock</div>
+  </div>
+
+  <div style="padding: 16px 16px 0 16px; display: flex; flex-direction: column; gap: 20px;">
+
+    <div style="background: #c42b1c; border-radius: 14px; padding: 20px; display: flex; flex-direction: column; gap: 15px;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3.5L21.5 20H2.5z"></path><path d="M12 10v4"></path><path d="M12 17.2v.1"></path>
+        </svg>
+        <div style="font-size: 18px; font-weight: 620; color: #ffffff;">Nothing is being blocked</div>
+      </div>
+      <div style="font-size: 15px; color: rgba(255,255,255,0.9); line-height: 1.45; text-wrap: pretty;">
+        Screen Time access was turned off, so Hard Lock cannot shield anything. Your cutoffs are still saved &mdash; they just are not being enforced.
+      </div>
+      <div style="height: 46px; border-radius: 11px; background: #ffffff; display: flex; align-items: center; justify-content: center;">
+        <div style="font-size: 16px; font-weight: 620; color: #c42b1c;">Grant access</div>
+      </div>
+    </div>
+
+    <div style="opacity: 0.42; display: flex; flex-direction: column; gap: 20px;">
+      <div style="background: #ffffff; border-radius: 14px; padding: 20px; display: flex; flex-direction: column; gap: 13px;">
+        <div class="micro" style="color: rgba(0,0,0,0.4);">Tonight &middot; not enforced</div>
+        <div style="display: flex; align-items: baseline; gap: 10px;">
+          <div class="num" style="font-size: 62px; font-weight: 200; letter-spacing: -3px; line-height: 0.95; color: rgba(0,0,0,0.5);">4:12</div>
+          <div style="font-size: 15px; color: rgba(0,0,0,0.45);">until 23:30</div>
+        </div>
+      </div>
+
+      <div style="background: #ffffff; border-radius: 14px; overflow: hidden;">
+        <div style="display: flex; align-items: center; padding: 0 16px; height: 52px; font-size: 17px;">Cutoff times</div>
+        <div style="height: 1px; background: rgba(0,0,0,0.07); margin-left: 16px;"></div>
+        <div style="display: flex; align-items: center; padding: 0 16px; height: 52px; font-size: 17px;">Commitment</div>
+      </div>
+    </div>
+
+    <div style="font-size: 13px; color: rgba(0,0,0,0.45); line-height: 1.45; padding: 0 16px; text-wrap: pretty;">
+      A Screen Time passcode stops this being switched off on a whim. Settings &rsaquo; Screen Time.
+    </div>
+
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

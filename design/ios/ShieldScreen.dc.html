@@ -1,0 +1,53 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #ff99a4; } a:hover { color: #ffb3bb; }
+    .num { font-variant-numeric: tabular-nums; }
+    .micro { font-size: 11px; font-weight: 590; letter-spacing: 0.6px; text-transform: uppercase; }
+  </style>
+</helmet>
+<div style="width: 393px; height: 852px; background: #0d0c0c; color: #ffffff; display: flex; flex-direction: column; padding: 0 34px 54px 34px; overflow: hidden;">
+
+  <div style="flex-grow: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 26px;">
+
+    <div style="width: 78px; height: 78px; border-radius: 20px; background: rgba(255,153,164,0.10); border: 1px solid rgba(255,153,164,0.25); display: flex; align-items: center; justify-content: center;">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#ff99a4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="4" y="10" width="16" height="11" rx="2.5"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path>
+      </svg>
+    </div>
+
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 10px;">
+      <div style="font-size: 26px; font-weight: 600; letter-spacing: -0.4px; text-align: center;">Not tonight</div>
+      <div style="font-size: 16px; color: rgba(255,255,255,0.55); text-align: center; line-height: 1.45; max-width: 270px; text-wrap: pretty;">
+        Hard Lock is holding everything shut until the day resets.
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; padding-top: 6px;">
+      <div class="num" style="font-size: 92px; font-weight: 100; letter-spacing: -5px; line-height: 1; color: #ff99a4;">3:47</div>
+      <div class="micro" style="color: rgba(255,255,255,0.38);">Opens at 04:00</div>
+    </div>
+
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <div style="height: 50px; border-radius: 14px; background: rgba(255,255,255,0.10); display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 590;">
+      OK
+    </div>
+    <div style="font-size: 12px; color: rgba(255,255,255,0.3); text-align: center; line-height: 1.4;">
+      Emergency calls are never blocked.
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

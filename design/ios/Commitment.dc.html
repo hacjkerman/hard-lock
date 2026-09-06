@@ -1,0 +1,83 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #c42b1c; } a:hover { color: #a32316; }
+    .num { font-variant-numeric: tabular-nums; }
+    .micro { font-size: 11px; font-weight: 590; letter-spacing: 0.6px; text-transform: uppercase; }
+  </style>
+</helmet>
+<div style="width: 393px; height: 852px; background: #efedea; color: #1a1a1a; display: flex; flex-direction: column; overflow: hidden;">
+
+  <div style="padding: 58px 16px 6px 16px; display: flex; align-items: center; gap: 4px;">
+    <svg width="11" height="18" viewBox="0 0 8 13" fill="none" stroke="#c42b1c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 1.5 L1.5 6.5 L6.5 11.5"></path></svg>
+    <div style="font-size: 17px; color: #c42b1c;">Hard Lock</div>
+  </div>
+  <div style="padding: 4px 20px 10px 20px;">
+    <div style="font-size: 34px; font-weight: 700; letter-spacing: -0.6px;">Commitment</div>
+  </div>
+
+  <div style="padding: 8px 16px 0 16px; display: flex; flex-direction: column; gap: 22px; flex-grow: 1;">
+
+    <div style="font-size: 15px; color: rgba(0,0,0,0.62); line-height: 1.5; padding: 0 4px; text-wrap: pretty;">
+      While you are committed, nothing can be loosened &mdash; only tightened. A commitment can be extended, never shortened or cancelled.
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 8px;">
+      <div class="micro" style="color: rgba(0,0,0,0.4); padding-left: 16px;">Lock in for</div>
+      <div style="background: rgba(0,0,0,0.05); border-radius: 11px; padding: 3px; display: flex; gap: 3px;">
+        <div style="flex-grow: 1; height: 36px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 15px; color: rgba(0,0,0,0.55);">1 month</div>
+        <div style="flex-grow: 1; height: 36px; border-radius: 9px; background: #ffffff; box-shadow: 0 2px 6px rgba(0,0,0,0.09); display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 590;">3 months</div>
+        <div style="flex-grow: 1; height: 36px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 15px; color: rgba(0,0,0,0.55);">6 months</div>
+        <div style="flex-grow: 1; height: 36px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 15px; color: rgba(0,0,0,0.55);">1 year</div>
+      </div>
+    </div>
+
+    <div style="background: #ffffff; border-radius: 14px; padding: 20px; display: flex; flex-direction: column; gap: 14px;">
+      <div class="micro" style="color: rgba(0,0,0,0.4);">You would be locked in until</div>
+      <div style="display: flex; align-items: baseline; gap: 9px;">
+        <div class="num" style="font-size: 40px; font-weight: 250; letter-spacing: -1.4px; line-height: 1;">6 Dec 2026</div>
+      </div>
+      <div style="height: 1px; background: rgba(0,0,0,0.07);"></div>
+      <div style="display: flex; flex-direction: column; gap: 9px;">
+        <div style="display: flex; gap: 9px; align-items: flex-start;">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#107c41" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 2px;"><path d="M4 12.5l5 5 11-11"></path></svg>
+          <div style="font-size: 14.5px; color: rgba(0,0,0,0.68); line-height: 1.4;">Tightening a cutoff keeps working</div>
+        </div>
+        <div style="display: flex; gap: 9px; align-items: flex-start;">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#c42b1c" stroke-width="2.1" stroke-linecap="round" style="flex-shrink: 0; margin-top: 2px;"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+          <div style="font-size: 14.5px; color: rgba(0,0,0,0.68); line-height: 1.4;">Later cutoffs are refused outright, not queued</div>
+        </div>
+        <div style="display: flex; gap: 9px; align-items: flex-start;">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#c42b1c" stroke-width="2.1" stroke-linecap="round" style="flex-shrink: 0; margin-top: 2px;"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+          <div style="font-size: 14.5px; color: rgba(0,0,0,0.68); line-height: 1.4;">Your one queued change is dropped</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex-grow: 1;"></div>
+
+    <div style="display: flex; flex-direction: column; gap: 10px; padding-bottom: 30px;">
+      <div style="height: 52px; border-radius: 14px; background: #c42b1c; display: flex; align-items: center; justify-content: center; gap: 9px;">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="4" y="10" width="16" height="11" rx="2.5"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path>
+        </svg>
+        <div style="font-size: 17px; font-weight: 620; color: #ffffff;">Confirm &mdash; this cannot be undone</div>
+      </div>
+      <div style="font-size: 13px; color: rgba(0,0,0,0.45); text-align: center; line-height: 1.4;">
+        Tap again to lock in. Tap anywhere else to back out.
+      </div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

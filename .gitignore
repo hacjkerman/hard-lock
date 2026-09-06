@@ -17,3 +17,6 @@ dist/
 
 # Release archives (attached to GitHub Releases, not committed)
 HardLock-v*.zip
+
+# Design canvas build output (regenerated from design/ios/*.dc.html)
+design/ios/hard-lock-ios.html

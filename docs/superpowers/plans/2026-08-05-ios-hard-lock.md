@@ -2,16 +2,19 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
-> **Stop at Task 5 and hand off.** Tasks 6–8 require a physical iPhone — Family
-> Controls does nothing in the Simulator, and those tasks are verified by tapping
-> buttons on a device. Tasks 0–5 are pure Swift and fully automatable; roughly 40% of
-> the remaining work is not. See [Amendment J](#j-task-order-and-executor-expectations).
+> **Start at Task 6.** Tasks 0–5 are built, tested and committed — see
+> [Build status](#build-status--2026-09-06). Tasks 6–8 require a physical iPhone;
+> Family Controls does nothing in the Simulator, so they are verified by tapping
+> buttons on a device and cannot be automated. See
+> [Amendment J](#j-task-order-and-executor-expectations).
 
 **Goal:** An iPhone app that shields every app after a per-day nightly cutoff, where loosening a rule waits out a cooldown and a fixed-term commitment blocks loosening entirely.
 
 **Architecture:** A pure-Swift rules engine (`LockRules`) makes every decision and is exhaustively unit-tested with an injected clock. A JSON config in a shared App Group container is the single source of truth, read by both the app and a `DeviceActivityMonitor` extension. iOS will not keep the app alive, so the extension is what actually enforces: iOS wakes it at the start of each lockout window, it shields all app categories via `ManagedSettings`, and clears them when the window ends at the day reset.
 
-**Tech Stack:** Swift 5.9+, SwiftUI, XCTest, FamilyControls, ManagedSettings, DeviceActivity. Xcode 15+ on macOS. iOS 16.0+ deployment target.
+**Tech Stack:** Swift 5.9+, SwiftUI, swift-testing, FamilyControls, ManagedSettings, DeviceActivity. Xcode 16+ on macOS. iOS 16.0+ deployment target.
+
+> **Amendment M:** the suite is **swift-testing** (`import Testing`, `@Test`, `#expect`), not XCTest. XCTest ships only inside Xcode, so an XCTest suite cannot run under SwiftPM; swift-testing runs under both and is native in Xcode 16+.
 
 ## Global Constraints
 
@@ -25,62 +28,106 @@
 - **Shields fail OPEN:** if config cannot be read or parsed, clear shields rather than strand the phone locked.
 - **Config keys mirror the desktop's `config.json`**: `cutoff_mon`…`cutoff_sun`, `day_reset_hour`, `edit_cooldown_hours`, `pending_changes`, `commit_until`. ⚠️ Key *names* mirror; **values do not round-trip** — see [Amendment C](#c-config-robustness-and-the-desktop-compat-claim). Do not treat this document as transportable to the desktop until that is fixed and tested.
 - **No network, no analytics, no accounts.** Local only.
-- Run tests with `xcodebuild test -scheme HardLock -destination 'platform=iOS Simulator,name=iPhone 15'` (or ⌘U in Xcode).
+- Run the kit tests with **`ios/test.sh`** (SwiftPM; no Xcode project needed). Once the Xcode project exists, `xcodebuild test -scheme HardLock -destination 'platform=iOS Simulator,name=iPhone 15'` or ⌘U also works. Every `xcodebuild test … -only-testing:` line inside Tasks 1–5 below is superseded by `ios/test.sh`.
 - Commit after every task.
 
 > ## ⚠️ Read the Amendments first
 >
-> This plan was reviewed on 2026-08-09. **Tasks 1–5 stand as written.** Tasks 6–10
-> carry defects — one of which can leave a phone permanently shielded — corrected in
-> the [Amendments](#amendments--2026-08-09-review) section at the end. Amendments
-> **A, B, C, D** change code the later tasks build on: apply them before starting
-> Task 6. Affected steps carry an inline `> **Amendment X**` marker.
+> This plan was reviewed on 2026-08-09 and **Tasks 0–5 were built on 2026-09-06**
+> with the review amendments applied — 47 tests, all passing. What shipped differs
+> from the code listings in those tasks; the listings are kept as the historical
+> record and the shipped files are authoritative. See
+> [Build status](#build-status--2026-09-06).
 >
-> Also note: **Tasks 6–8 cannot be completed without a physical iPhone**, so an
-> agentic executor should stop at Task 5 and hand off ([Amendment J](#j-task-order-and-executor-expectations)).
-> Run **Task 0** ([Amendment F](#f-new-task-0--repo-prep-do-before-task-1)) before Task 1,
-> and consider swapping Tasks 3 and 4.
+> **Tasks 6–10 are not built and still carry the reviewed defects** — one of which
+> can leave a phone permanently shielded. Amendments **A, B, D** change code those
+> tasks build on: apply them as you go. Affected steps carry an inline
+> `> **Amendment X**` marker. **Tasks 6–8 cannot be completed without a physical
+> iPhone** ([Amendment J](#j-task-order-and-executor-expectations)).
+
+## Build status — 2026-09-06
+
+**Tasks 0–5: built, tested, committed.** 47 tests in 6 suites, all passing, zero
+warnings. Run them with `ios/test.sh` — no Xcode project, no Apple Developer
+account, no device.
+
+The shipped code differs from the listings inside Tasks 1–5, because the
+amendments were applied while writing. Where they disagree, **the files on disk
+are authoritative**; the listings are kept as the historical record of what was
+originally planned. Specifically:
+
+| Amendment | What shipped |
+|---|---|
+| **C** | `ConfigStore` is tolerant on read, desktop-shaped on write. A malformed `pending_changes` row drops only itself. Timestamps parse naive-local and offset-bearing, with and without microseconds. New `loadWithStatus()` separates *missing* from *corrupt*, which `load()` could not. Writes naive-local deliberately: an offset-bearing value makes the desktop raise when comparing against a naive `datetime.now()`. |
+| **G** | `ApplyResult` gained `unknown: [String]`. `apply()` no longer reports a silent no-op as `applied`. |
+| **I** | All six untested behaviours now covered, plus DST spring-forward and a cutoff at the reset hour. 27 planned tests → 47. |
+| **J** | Commitments written before the weakening path, so the throwaway `isCommitted` stub was never needed. |
+| **F** | Task 0 done: `ios/.gitignore` and a `Package.swift` for CI. |
+| **M** | swift-testing, not XCTest (see Tech Stack). |
+
+**Tasks 6–10: not started.** Everything remaining touches `ManagedSettings` or
+`DeviceActivity` and needs the entitlements plus a physical iPhone. Amendments
+**A, B, D, E, H, K, L** all apply to that half and are still outstanding.
+
+**Toolchain note.** `xcode-select` on this Mac points at the Command Line Tools,
+whose `Testing.framework` ships without its runtime interop dylib — a bare
+`swift test` builds and then dies in `dlopen`. `ios/test.sh` sets `DEVELOPER_DIR`
+to `/Applications/Xcode.app` for the one command, needing no sudo and changing
+nothing globally.
 
 ## File Structure
 
+`[x]` exists on disk today; `[ ]` is still to be built.
+
 ```
 ios/
-  HardLock.xcodeproj
+  [x] Package.swift               # SwiftPM: builds/tests HardLockKit alone
+  [x] test.sh                     # runs the suite (sets DEVELOPER_DIR)
+  [x] .gitignore                  # Task 0 — Amendment F
+  [ ] HardLock.xcodeproj
   HardLock/                       # app target
-    HardLockApp.swift             # @main, root view
+    [ ] HardLockApp.swift         # @main, root view
     Views/
-      StatusView.swift            # locked-out state / time until cutoff
-      CutoffEditorView.swift      # per-weekday cutoff times
-      CommitmentView.swift        # lock-in with confirm step
-      PendingChangesView.swift    # queued weakenings + time remaining
+      [ ] StatusView.swift        # locked-out state / time until cutoff
+      [ ] CutoffEditorView.swift  # per-weekday cutoff times
+      [ ] CommitmentView.swift    # lock-in with confirm step
+      [ ] PendingChangesView.swift
     Services/
-      AuthorizationService.swift  # FamilyControls authorization
-      ScheduleManager.swift       # DeviceActivity schedules
-      LockStore.swift             # view model (Task 9)
-    HardLock.entitlements
+      [ ] AuthorizationService.swift
+      [ ] ScheduleManager.swift   # DeviceActivity schedules
+      [ ] LockStore.swift         # view model (Task 9)
+    [ ] HardLock.entitlements
   HardLockKit/                    # shared framework: app + extension
-    LockRules.swift               # pure rules engine (no Apple frameworks)
-    LockConfig.swift              # Codable config model
-    ConfigStore.swift             # App Group JSON persistence
-    ShieldController.swift        # ManagedSettings wrapper (moved here — Amendment A)
-    ShieldReconciler.swift        # makes shield state match the rules (Amendment A)
+    [x] LockRules.swift           # pure rules engine (no Apple frameworks)
+    [x] LockConfig.swift          # Codable config model
+    [x] ConfigStore.swift         # App Group JSON persistence
+    [ ] ShieldController.swift    # ManagedSettings wrapper (Amendment A)
+    [ ] ShieldReconciler.swift    # shield state <- rules (Amendment A)
   HardLockMonitor/                # DeviceActivityMonitor extension
-    MonitorExtension.swift
-    HardLockMonitor.entitlements
+    [ ] MonitorExtension.swift
+    [ ] HardLockMonitor.entitlements
   HardLockKitTests/
-    LockRulesCutoffTests.swift
-    LockRulesWeakeningTests.swift
-    LockRulesCommitmentTests.swift
-    ScheduleWindowTests.swift     # created by Task 8
-    ConfigStoreTests.swift        # also holds LockConfigTests — see Amendment I
-  .gitignore                      # Task 0 — Amendment F
+    [x] TestClock.swift           # at(), testCalendar, zonedCalendar
+    [x] LockConfigTests.swift     # split out — Amendment I
+    [x] LockRulesCutoffTests.swift
+    [x] LockRulesWeakeningTests.swift
+    [x] LockRulesCommitmentTests.swift
+    [x] ScheduleWindowTests.swift
+    [x] ConfigStoreTests.swift
 ```
+
+The two unbuilt HardLockKit files import `ManagedSettings`, which does not exist
+on macOS. When they land they need `#if canImport(ManagedSettings)` guards or an
+`exclude:` in `Package.swift`, or `ios/test.sh` stops working on this Mac.
 
 `LockRules` and `ConfigStore` live in a framework because the extension needs them too — an extension cannot import the app target.
 
 ---
 
-### Task 1: `LockConfig` model + defaults
+### Task 1: `LockConfig` model + defaults ✅ BUILT
+
+> Built 2026-09-06 with amendments applied. The listings below are the
+> original plan, not what shipped — see [Build status](#build-status--2026-09-06).
 
 **Files:**
 - Create: `ios/HardLockKit/LockConfig.swift`
@@ -258,7 +305,10 @@ git commit -m "iOS: LockConfig model with desktop-compatible JSON keys"
 
 ---
 
-### Task 2: `LockRules` — logical day + cutoff resolution
+### Task 2: `LockRules` — logical day + cutoff resolution ✅ BUILT
+
+> Built 2026-09-06 with amendments applied. The listings below are the
+> original plan, not what shipped — see [Build status](#build-status--2026-09-06).
 
 **Files:**
 - Create: `ios/HardLockKit/LockRules.swift`
@@ -433,7 +483,10 @@ git commit -m "iOS: LockRules logical-day rollover and cutoff resolution"
 
 ---
 
-### Task 3: `LockRules` — tighten now, weaken later
+### Task 3: `LockRules` — tighten now, weaken later ✅ BUILT
+
+> Built 2026-09-06 with amendments applied. The listings below are the
+> original plan, not what shipped — see [Build status](#build-status--2026-09-06).
 
 **Files:**
 - Modify: `ios/HardLockKit/LockRules.swift`
@@ -630,7 +683,10 @@ git commit -m "iOS: tighten-now / weaken-later rules with day-reset-aware cutoff
 
 ---
 
-### Task 4: `LockRules` — fixed-term commitments
+### Task 4: `LockRules` — fixed-term commitments ✅ BUILT
+
+> Built 2026-09-06 with amendments applied. The listings below are the
+> original plan, not what shipped — see [Build status](#build-status--2026-09-06).
 
 **Files:**
 - Modify: `ios/HardLockKit/LockRules.swift`
@@ -754,7 +810,10 @@ git commit -m "iOS: extend-only commitments that reject weakening"
 
 ---
 
-### Task 5: `ConfigStore` — App Group persistence
+### Task 5: `ConfigStore` — App Group persistence ✅ BUILT
+
+> Built 2026-09-06 with amendments applied. The listings below are the
+> original plan, not what shipped — see [Build status](#build-status--2026-09-06).
 
 **Files:**
 - Create: `ios/HardLockKit/ConfigStore.swift`
@@ -1122,7 +1181,11 @@ git commit -m "iOS: ShieldController for shield-everything lockout"
 
 ---
 
-### Task 8: `ScheduleManager` + monitor extension
+### Task 8: `ScheduleManager` + monitor extension ◐ PARTIAL
+
+> `distinctCutoffTimes()` and `cutoffApplies(hhmm:now:)` (Step 3) are built and
+> tested. `ScheduleManager` and `MonitorExtension` are not — they need the
+> entitlements and a device.
 
 **Files:**
 - Create: `ios/HardLock/Services/ScheduleManager.swift`
@@ -1884,6 +1947,10 @@ as dead code. Either is defensible; the current state is neither.
 
 ## C. Config robustness, and the desktop-compat claim
 
+> **✅ Implemented 2026-09-06.** All three parts, plus tests. The compat claim in
+> Global Constraints was rewritten rather than dropped: naive-local write and
+> tolerant read make it true, and `ConfigStoreTests` pins both directions.
+
 **The claim in Global Constraints — that the document transports to the desktop
 unchanged — is false as specified.** Key *names* mirror. Values do not:
 
@@ -1962,6 +2029,10 @@ alongside the other honest limitations, not discovered in week two.
 
 ## F. New Task 0 — repo prep (do before Task 1)
 
+> **✅ Done 2026-09-06.** Both steps. Step 2 was answered *yes* — `ios/Package.swift`
+> builds and tests `HardLockKit` with no Xcode project. The repo still has no
+> `.github/`, so nothing runs on push; that remains open for both platforms.
+
 - [ ] **Step 1: Add `ios/.gitignore`**
 
 The repo's `.gitignore` is Python-only. Task 6 Step 7 runs `git add ios/`, which
@@ -1984,6 +2055,11 @@ build and test under SwiftPM without Xcode project surgery. Either add a
 the rules engine is only ever tested by hand.
 
 ## G. Rules-model parity gaps the plan does not acknowledge
+
+> **◐ Partly addressed 2026-09-06.** The unknown-key bug is fixed (`ApplyResult.unknown`)
+> and `LockConfig.isKnownKey` exists. The four UI-facing gaps below — cancel-pending,
+> not porting `activate_pending`, cooldown-needs-launch, and clearing a cutoff — are
+> still open and land in Task 9.
 
 Each is a deliberate-looking omission with no stated decision. Decide explicitly.
 
@@ -2028,6 +2104,10 @@ should state the current behaviour either way.
 
 ## I. Test additions
 
+> **✅ Done 2026-09-06.** Every box below is covered; the suite is 47 tests. The
+> housekeeping items are done too: `LockConfigTests` split into its own file,
+> `ScheduleWindowTests` and `TestClock` exist, and `testCalendar` is a `let`.
+
 The suite is 27 tests (21 for the rules engine) against 63 in the desktop's
 `tests/test_config.py`. Most of that gap is legitimately out of scope — caps,
 warnings, game deferral, disarm. These are not:
@@ -2056,6 +2136,10 @@ should be `let` (global `var` is lazily initialised and not safe under parallel 
 execution).
 
 ## J. Task order and executor expectations
+
+> **✅ Applied 2026-09-06.** Commitments were written before the weakening path, so
+> the stub never existed. The hand-off point moved: Tasks 0–5 are done, and an
+> executor now starts at Task 6 — which still needs a human with a phone.
 
 **Swap Tasks 3 and 4.** Commitments have no dependency on the weakening path, so
 running them first removes the throwaway `isCommitted` stub in Task 3 Step 4
@@ -2099,11 +2183,43 @@ Add to Task 10 Step 4 and to Final verification:
 - [ ] Delete and reinstall during an active commitment; confirm the commitment
       survives (amendment H) or document that it does not.
 
+## M. swift-testing, not XCTest
+
+**Discovered while building Tasks 0–5.** The plan's Tech Stack named XCTest, and
+every task step ran it via `xcodebuild test -scheme HardLock`. That cannot work
+before Task 6 exists, and it defeats the point of Amendment F — a SwiftPM package
+whose tests need an Xcode project is not a package you can run on its own.
+
+**XCTest ships only inside Xcode.** It is not in the Command Line Tools, so an
+XCTest suite cannot build under SwiftPM at all. swift-testing can, and Xcode 16+
+supports it natively, so the choice costs nothing later:
+
+```swift
+import Testing
+@Test func earlierCutoffAppliesNow() { #expect(res.applied == ["cutoff_fri"]) }
+```
+
+Mechanical differences from the listings in Tasks 1–5: `XCTestCase` subclasses
+become plain structs (a fresh instance per test, so `setUp` becomes `init`);
+`XCTAssertEqual(a, b)` becomes `#expect(a == b)`; `XCTUnwrap` becomes
+`try #require`; `XCTAssertThrowsError { }` becomes `#expect(throws:) { }`; and a
+suite needing teardown uses a `final class` with `deinit`.
+
+**One toolchain wrinkle.** The Command Line Tools ship `Testing.framework` but
+not its runtime `lib_TestingInterop.dylib`, so a bare `swift test` compiles,
+links, and then dies in `dlopen`. `ios/test.sh` sets `DEVELOPER_DIR` to
+`/Applications/Xcode.app` for that one command — no sudo, and no global
+`xcode-select` change that would surprise anything else on this host.
+
 ## Revised priority
 
-1. **A** — reconciliation. The only defect that can strand a phone.
+**Done:** C, F, I, J, M, and the unknown-key half of G.
+
+**Remaining, in order:**
+
+1. **A** — reconciliation. The only defect that can strand a phone. Needs Task 7's
+   `ShieldController` to exist first, so it lands alongside it.
 2. **B** — shield scope. Decide before building UI that is unreachable during lockout.
-3. **C** — decode robustness. Silent config reset is data loss.
-4. **D** — the crash and the write storm.
-5. **E**, **F** — cheap, and each costs an hour of blind debugging if missed.
-6. **G**–**L** — parity, tests, polish.
+3. **D** — the `ConfigStore.shared()!` crash and the DatePicker write storm (Task 9).
+4. **E** — the three Xcode traps. Cheap; each costs an hour of blind debugging if missed.
+5. **G** (remainder), **H**, **K**, **L** — parity, durability, polish, verification.

@@ -1,0 +1,58 @@
+name: HardLock
+options:
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: DT8S9V23B6
+    TARGETED_DEVICE_FAMILY: "1"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+packages:
+  HardLockKit:
+    path: ../HardLockKit
+targets:
+  HardLock:
+    type: application
+    platform: iOS
+    sources:
+      - path: ../HardLock
+    dependencies:
+      - package: HardLockKit
+      - target: HardLockMonitor
+        embed: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hardlock.ios
+        CODE_SIGN_ENTITLEMENTS: ../HardLock/HardLock.entitlements
+    info:
+      path: HardLock-Info.plist
+      properties:
+        CFBundleDisplayName: Hard Lock
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+  HardLockMonitor:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ../HardLockMonitor
+    dependencies:
+      - package: HardLockKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hardlock.ios.monitor
+        CODE_SIGN_ENTITLEMENTS: ../HardLockMonitor/HardLockMonitor.entitlements
+        APPLICATION_EXTENSION_API_ONLY: YES
+    info:
+      path: HardLockMonitor-Info.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.deviceactivity.monitor-extension
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).MonitorExtension
+schemes:
+  HardLock:
+    build:
+      targets:
+        HardLock: all

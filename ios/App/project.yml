@@ -38,6 +38,7 @@ targets:
     platform: iOS
     sources:
       - path: ../HardLockMonitor
+      - path: ../HardLock/Services/ShieldController.swift
     dependencies:
       - package: HardLockKit
     settings:

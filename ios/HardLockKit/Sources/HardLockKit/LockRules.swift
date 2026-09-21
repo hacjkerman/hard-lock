@@ -157,3 +157,25 @@ public extension LockRules {
         return updated
     }
 }
+public extension LockRules {
+
+    /// Every distinct cutoff time in the schedule. A DeviceActivitySchedule
+    /// repeats daily rather than weekly, so we register one activity per
+    /// distinct time (at most seven) instead of one per weekday.
+    func distinctCutoffTimes() -> [String] {
+        var seen = Set<String>()
+        for i in 0..<7 {
+            if let t = config.cutoff(forWeekdayIndex: i), LockRules.minutes(fromHHMM: t) != nil {
+                seen.insert(t)
+            }
+        }
+        return seen.sorted()
+    }
+
+    /// True when the logical day containing `now` uses this cutoff time — the
+    /// check the extension makes before shielding, since it is woken by every
+    /// registered schedule regardless of which day it is.
+    func cutoffApplies(hhmm: String, now: Date) -> Bool {
+        config.cutoff(forWeekdayIndex: logicalWeekdayIndex(now: now)) == hhmm
+    }
+}

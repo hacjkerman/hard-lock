@@ -31,8 +31,7 @@ final class MonitorExtension: DeviceActivityMonitor {
             do { try ScheduleManager(store: store).refreshSchedules(now: now) }
             catch { shields.clear(); return }
         }
-        let effective = LockRules(config: saved).refreshPending(now: now)
-        if LockRules(config: effective).isLockedOut(now: now) {
+        if LockRules(config: saved).isLockedOutForMonitor(now: now) {
             shields.shieldEverything()
         } else {
             shields.clear()

@@ -106,9 +106,9 @@ public enum ConfigValidationError: Error, LocalizedError {
 public extension LockConfig {
     func validate() throws {
         guard (0..<24).contains(dayResetHour), (0...87600).contains(editCooldownHours),
-              (0..<7).allSatisfy({ cutoff(forWeekdayIndex: $0).map { LockRules.minutes(fromHHMM: $0) != nil } ?? true }),
+              (0..<7).allSatisfy({ cutoff(forWeekdayIndex: $0).map { LockRules(config: self).isValidCutoff($0) } ?? true }),
               pendingChanges.allSatisfy({ key, change in
-                  Self.weekdayKeys.contains(key) && (change.value.map { LockRules.minutes(fromHHMM: $0) != nil } ?? true)
+                  Self.weekdayKeys.contains(key) && (change.value.map { LockRules(config: self).isValidCutoff($0) } ?? true)
               }) else { throw ConfigValidationError.invalidRules }
     }
 }

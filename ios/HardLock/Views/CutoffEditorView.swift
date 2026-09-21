@@ -42,6 +42,11 @@ struct CutoffEditorView: View {
     }
 
     private func setCutoff(_ value: String?, day: Int) {
+        if let value, !LockRules(config: lock.config).isValidCutoff(value) {
+            let hour = String(format: "%02d", lock.config.dayResetHour)
+            message = "Choose a cutoff outside the reset hour (\(hour):00–\(hour):59). That hour is reserved to prevent an all-day lockout."
+            return
+        }
         let result = lock.apply([LockConfig.weekdayKeys[day]: value])
         if let error = lock.lastError {
             message = error

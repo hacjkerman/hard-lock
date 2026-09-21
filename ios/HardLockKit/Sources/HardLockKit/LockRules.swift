@@ -50,7 +50,7 @@ public struct LockRules {
     public func cutoffDate(now: Date) -> Date? {
         let idx = logicalWeekdayIndex(now: now)
         guard let hhmm = config.cutoff(forWeekdayIndex: idx),
-              let mins = LockRules.minutes(fromHHMM: hhmm) else { return nil }
+              let mins = LockRules.minutes(fromHHMM: hhmm), isValidCutoff(hhmm) else { return nil }
 
         var day = calendar.startOfDay(for: logicalDayStart(now: now))
         if mins < config.dayResetHour * 60 {
@@ -91,6 +91,13 @@ public extension LockRules {
         return ((m - config.dayResetHour * 60) % 1440 + 1440) % 1440
     }
 
+    /// The reset hour is reserved: accepting it would lock almost a whole day.
+    func isValidCutoff(_ hhmm: String) -> Bool {
+        guard (0..<24).contains(config.dayResetHour),
+              let minute = logicalCutoffMinute(hhmm) else { return false }
+        return minute >= 60
+    }
+
     /// A later cutoff (or removing it entirely) relaxes the lock.
     func cutoffWeakens(oldValue: String?, newValue: String?) -> Bool {
         if newValue == nil { return oldValue != nil }   // removing a limit
@@ -111,7 +118,7 @@ public extension LockRules {
         for key in changes.keys.sorted() {
             let newValue = changes[key] ?? nil
             guard LockConfig.weekdayKeys.contains(key),
-                  newValue == nil || Self.minutes(fromHHMM: newValue!) != nil else {
+                  newValue == nil || isValidCutoff(newValue!) else {
                 rejected.append(key)
                 continue
             }
@@ -145,7 +152,7 @@ public extension LockRules {
         }
         for (key, change) in config.pendingChanges where change.effectiveAt <= now {
             guard LockConfig.weekdayKeys.contains(key),
-                  change.value == nil || Self.minutes(fromHHMM: change.value!) != nil else {
+                  change.value == nil || isValidCutoff(change.value!) else {
                 updated.pendingChanges.removeValue(forKey: key)
                 continue
             }
@@ -188,7 +195,7 @@ public extension LockRules {
     func distinctCutoffTimes() -> [String] {
         var seen = Set<String>()
         for i in 0..<7 {
-            if let t = config.cutoff(forWeekdayIndex: i), LockRules.minutes(fromHHMM: t) != nil {
+            if let t = config.cutoff(forWeekdayIndex: i), isValidCutoff(t) {
                 seen.insert(t)
             }
         }
@@ -204,13 +211,21 @@ public extension LockRules {
 }
 
 public extension LockRules {
+    /// DeviceActivity callbacks may arrive just before their wall-clock edge.
+    /// Look ahead at both cutoff and reset, including edits maturing at the edge.
+    func isLockedOutForMonitor(now: Date) -> Bool {
+        let evaluationDate = now.addingTimeInterval(60)
+        let effective = refreshPending(now: evaluationDate)
+        return LockRules(config: effective, calendar: calendar).isLockedOut(now: evaluationDate)
+    }
+
     /// Register future values too so a closed app can enforce a matured edit.
     /// At most fourteen cutoff schedules, plus one pending-change wakeup.
     func monitoringCutoffTimes(now: Date) -> [String] {
         let effective = refreshPending(now: now)
         var times = Set(LockRules(config: effective, calendar: calendar).distinctCutoffTimes())
         for change in effective.pendingChanges.values {
-            if let value = change.value, Self.minutes(fromHHMM: value) != nil { times.insert(value) }
+            if let value = change.value, isValidCutoff(value) { times.insert(value) }
         }
         return times.sorted()
     }
@@ -226,7 +241,7 @@ public struct MonitoringWindow: Equatable {
 
 public extension LockRules {
     func monitoringWindow(hhmm: String) -> MonitoringWindow? {
-        guard let mins = Self.minutes(fromHHMM: hhmm), (0..<24).contains(config.dayResetHour) else { return nil }
+        guard let mins = Self.minutes(fromHHMM: hhmm), isValidCutoff(hhmm) else { return nil }
         let reset = config.dayResetHour * 60
         let duration = (reset - mins + 1440) % 1440
         let short = duration < 15

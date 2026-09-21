@@ -66,6 +66,35 @@ final class RegressionTests: XCTestCase {
         XCTAssertFalse(r.isLockedOut(now: at(2026, 1, 10, 4, 0)))
     }
 
+    func testMonitorToleratesEarlyCutoffAndResetCallbacks() {
+        let rules = LockRules(config: .default, calendar: testCalendar)
+        let beforeCutoff = at(2026, 1, 9, 23, 30).addingTimeInterval(-1)
+        let beforeReset = at(2026, 1, 10, 4, 0).addingTimeInterval(-1)
+        XCTAssertFalse(rules.isLockedOut(now: beforeCutoff))
+        XCTAssertTrue(rules.isLockedOutForMonitor(now: beforeCutoff))
+        XCTAssertTrue(rules.isLockedOut(now: beforeReset))
+        XCTAssertFalse(rules.isLockedOutForMonitor(now: beforeReset))
+        XCTAssertFalse(rules.isLockedOutForMonitor(now: beforeCutoff.addingTimeInterval(-60)))
+    }
+
+    func testMonitorLookaheadHonorsWeekdayAndShortWindowWarning() {
+        let config = LockConfig.default.withCutoff("03:59", forWeekdayIndex: 4)
+            .withCutoff(nil, forWeekdayIndex: 5)
+        let rules = LockRules(config: config, calendar: testCalendar)
+        XCTAssertFalse(rules.isLockedOutForMonitor(now: at(2026, 1, 10, 3, 45).addingTimeInterval(-1)))
+        XCTAssertTrue(rules.isLockedOutForMonitor(now: at(2026, 1, 10, 3, 59).addingTimeInterval(-1)))
+        XCTAssertFalse(rules.isLockedOutForMonitor(now: at(2026, 1, 10, 4, 0).addingTimeInterval(-1)))
+        XCTAssertFalse(rules.isLockedOutForMonitor(now: at(2026, 1, 10, 23, 30).addingTimeInterval(-1)))
+    }
+
+    func testMonitorLookaheadUsesEditsMaturingAtEdge() {
+        let cutoff = at(2026, 1, 9, 23, 30)
+        var config = LockConfig.default
+        config.pendingChanges["cutoff_fri"] = PendingChange(value: nil, effectiveAt: cutoff)
+        XCTAssertFalse(LockRules(config: config, calendar: testCalendar)
+            .isLockedOutForMonitor(now: cutoff.addingTimeInterval(-1)))
+    }
+
     func testInvalidConfigFailsStrictLoad() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -109,12 +138,49 @@ final class MonitoringWindowTests: XCTestCase {
         XCTAssertEqual(window.warningMinutes, 1)
     }
 
-    func testCutoffAtResetUsesResetCallback() throws {
-        let window = try XCTUnwrap(LockRules(config: .default).monitoringWindow(hhmm: "04:00"))
-        XCTAssertEqual(window.startMinute, 225)
-        XCTAssertNil(window.warningMinutes)
-        let config = LockConfig.default.withCutoff("04:00", forWeekdayIndex: 4)
-        XCTAssertTrue(LockRules(config: config, calendar: testCalendar).isLockedOut(now: at(2026, 1, 9, 4, 0)))
+    func testResetHourCutoffsAreRejected() {
+        for resetHour in [0, 4, 23] {
+            var config = LockConfig.default
+            config.dayResetHour = resetHour
+            let rules = LockRules(config: config, calendar: testCalendar)
+            for minute in [0, 1, 59] {
+                let value = String(format: "%02d:%02d", resetHour, minute)
+                let result = rules.apply(changes: ["cutoff_fri": value], now: at(2026, 1, 9, 12, 0))
+                XCTAssertEqual(result.rejected, ["cutoff_fri"])
+                XCTAssertEqual(result.config, config)
+                XCTAssertNil(rules.monitoringWindow(hhmm: value))
+                let invalid = config.withCutoff(value, forWeekdayIndex: 4)
+                XCTAssertFalse(LockRules(config: invalid, calendar: testCalendar).isLockedOut(now: at(2026, 1, 9, 12, 0)))
+            }
+            XCTAssertTrue(rules.isValidCutoff(String(format: "%02d:59", (resetHour + 23) % 24)))
+            XCTAssertTrue(rules.isValidCutoff(String(format: "%02d:00", (resetHour + 1) % 24)))
+        }
+    }
+
+    func testStoreRejectsActiveAndPendingResetHourCutoffs() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = ConfigStore(directory: dir)
+        let now = at(2026, 1, 9, 12, 0)
+        for value in ["04:00", "04:30", "04:59"] {
+            for pending in [false, true] {
+                var config = LockConfig.default
+                if pending {
+                    config.pendingChanges["cutoff_fri"] = PendingChange(value: value, effectiveAt: now)
+                    let refreshed = LockRules(config: config).refreshPending(now: now)
+                    XCTAssertEqual(refreshed.cutoffFri, "23:30")
+                    XCTAssertTrue(refreshed.pendingChanges.isEmpty)
+                } else {
+                    config.cutoffFri = value
+                }
+                XCTAssertThrowsError(try store.save(config))
+                let encoder = JSONEncoder()
+                encoder.dateEncodingStrategy = .iso8601
+                try encoder.encode(config).write(to: dir.appendingPathComponent("config.json"))
+                XCTAssertThrowsError(try store.loadStrict())
+            }
+        }
     }
 
     func testShortWindowWrapsAcrossMidnight() throws {

@@ -133,5 +133,27 @@ public extension LockRules {
     }
 }
 public extension LockRules {
-    func isCommitted(now: Date) -> Bool { false }   // replaced in Task 4
+
+    /// A commitment is active until `commitUntil` passes. While active, nothing
+    /// can be weakened — only tightened.
+    func isCommitted(now: Date) -> Bool {
+        guard let until = config.commitUntil else { return false }
+        return now < until
+    }
+
+    func commitRemaining(now: Date) -> TimeInterval? {
+        guard let until = config.commitUntil else { return nil }
+        return max(0, until.timeIntervalSince(now))
+    }
+
+    /// Lock in for a term. Extend-only: never shortens an existing commitment.
+    /// Queued weakenings are dropped — they cannot benefit you during the term.
+    func commit(duration: TimeInterval, now: Date) -> LockConfig {
+        let clamped = min(max(duration, 60), 10 * 365 * 24 * 3600)   // 1 min … ~10 years
+        var updated = config
+        let end = now.addingTimeInterval(clamped)
+        updated.commitUntil = max(end, config.commitUntil ?? end)
+        updated.pendingChanges = [:]
+        return updated
+    }
 }

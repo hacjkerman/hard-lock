@@ -7,10 +7,15 @@ still going if either
 
   1. some transcript was written within a recent window (normal back-and-forth
      work — many small appends), or
-  2. a transcript's last entry is an unfinished tool call (``tool_use`` with no
-     matching ``tool_result`` yet). Nothing is appended *during* a long-running
+  2. a transcript's current turn has a tool call (``tool_use``) with no
+     matching ``tool_result`` yet. Nothing is appended *during* a long-running
      tool, so this is what distinguishes "one slow operation in progress" from
-     "the session actually finished".
+     "the session actually finished". Claude Code also appends bookkeeping
+     lines after messages (last-prompt, custom-title, mode, atis-latch,
+     system…) and runs several tools per turn, so the check walks back past
+     those and matches call ids to result ids rather than reading the last
+     line alone — reading the last line alone is what let a ten-minute build
+     get the machine powered off under it.
 
 Both checks cover ALL sessions and subagents: active while *any* transcript is
 active, idle only once every session has finished. Reads modification times and
@@ -54,8 +59,12 @@ def is_claude_running(process_names=None) -> bool:
     return any(n in running for n in names)
 
 
-def _last_entry(path: Path):
-    """The last JSON entry of a transcript, or None. Reads only the file's tail."""
+_MESSAGE_TYPES = ("assistant", "user")
+
+
+def _tail_entries(path: Path) -> list:
+    """The JSON entries in a transcript's tail, oldest first. Reads only the
+    last _TAIL_BYTES; a line that is not JSON is skipped."""
     try:
         size = path.stat().st_size
         with open(path, "rb") as f:
@@ -63,30 +72,55 @@ def _last_entry(path: Path):
                 f.seek(size - _TAIL_BYTES)
                 f.readline()  # discard a partial line
             lines = [ln for ln in f.read().splitlines() if ln.strip()]
-        if not lines:
-            return None
-        return json.loads(lines[-1].decode("utf-8", "replace"))
-    except (OSError, ValueError):
-        return None
+    except OSError:
+        return []
+    out = []
+    for ln in lines:
+        try:
+            entry = json.loads(ln.decode("utf-8", "replace"))
+        except ValueError:
+            continue
+        if isinstance(entry, dict):
+            out.append(entry)
+    return out
 
 
-def _block_types(entry) -> list:
+def _blocks(entry) -> list:
     msg = entry.get("message") or {}
     content = msg.get("content")
-    if isinstance(content, list):
-        return [b.get("type") for b in content if isinstance(b, dict)]
-    return []
+    return [b for b in content if isinstance(b, dict)] if isinstance(content, list) else []
 
 
 def _has_unfinished_tool_call(path: Path) -> bool:
-    """True if the transcript ends on an assistant tool_use — i.e. a tool is
-    still running (its tool_result hasn't been appended yet)."""
-    entry = _last_entry(path)
-    if not isinstance(entry, dict):
+    """True while the transcript's current turn has a tool call with no result.
+
+    Walks back from the end, ignoring lines that are not messages, through the
+    trailing run of tool calls and results, and stops at the turn's boundary:
+    an assistant message that is text (the turn's answer) or a user message
+    that is not a tool result (a new prompt). Ids are matched where the
+    transcript carries them; without them, calls and results are counted.
+    """
+    asked, answered = [], []
+    for entry in reversed(_tail_entries(path)):
+        kind = entry.get("type")
+        if kind not in _MESSAGE_TYPES:
+            continue
+        blocks = _blocks(entry)
+        types = [b.get("type") for b in blocks]
+        if kind == "user":
+            if "tool_result" not in types:
+                break  # a human prompt: what came before is a finished turn
+            answered.extend(b.get("tool_use_id") for b in blocks if b.get("type") == "tool_result")
+        elif "tool_use" in types:
+            asked.extend(b.get("id") for b in blocks if b.get("type") == "tool_use")
+        elif "text" in types:
+            break  # the turn's answer: nothing is running
+        # a thinking-only entry sits between calls; keep walking
+    if not asked:
         return False
-    if entry.get("type") != "assistant":
-        return False
-    return "tool_use" in _block_types(entry)
+    if None not in asked and None not in answered:
+        return bool(set(asked) - set(answered))
+    return len(asked) > len(answered)
 
 
 def is_claude_active(window_seconds: float = DEFAULT_WINDOW_SECONDS,

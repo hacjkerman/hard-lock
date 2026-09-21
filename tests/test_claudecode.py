@@ -87,6 +87,46 @@ class ClaudeCodeTestCase(unittest.TestCase):
                age_seconds=claudecode.IN_FLIGHT_MAX_SECONDS + 3600)
         self.assertFalse(self.active())
 
+    # ───────── real transcript shapes ─────────
+    # Claude Code appends bookkeeping lines (last-prompt, custom-title, mode,
+    # atis-latch, system…) after messages, and issues several tool calls in one
+    # turn. The in-flight check has to see through both, or a build that runs
+    # quietly for ten minutes gets the machine powered off under it.
+    def test_bookkeeping_lines_after_an_unanswered_tool_call_still_hold(self):
+        entries = [
+            {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "A"}]}},
+            {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "A"}]}},
+            {"type": "assistant", "message": {"content": [{"type": "thinking"}]}},
+            {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "B"}]}},
+            {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "C"}]}},
+            {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "B"}]}},
+            {"type": "last-prompt"}, {"type": "custom-title"}, {"type": "mode"}, {"type": "atis-latch"},
+        ]
+        _write(self.base / "proj" / "s1.jsonl", entries, age_seconds=1800)
+        self.assertTrue(self.active(), "C has no result yet: a tool is still running")
+
+    def test_bookkeeping_lines_after_a_finished_turn_do_not_hold(self):
+        entries = [
+            {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "B"}]}},
+            {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "C"}]}},
+            {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "B"}]}},
+            {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "C"}]}},
+            {"type": "assistant", "message": {"content": [{"type": "text"}]}},
+            {"type": "system"}, {"type": "atis-latch"},
+        ]
+        _write(self.base / "proj" / "s1.jsonl", entries, age_seconds=1800)
+        self.assertFalse(self.active())
+
+    def test_a_new_human_prompt_starts_a_fresh_turn(self):
+        # An unanswered call from before a fresh prompt is history, not in flight.
+        entries = [
+            {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "A"}]}},
+            {"type": "user", "message": {"content": "do something else"}},
+            {"type": "system"},
+        ]
+        _write(self.base / "proj" / "s1.jsonl", entries, age_seconds=1800)
+        self.assertFalse(self.active())
+
     # ───────── resilience ─────────
     def test_corrupt_transcript_does_not_raise(self):
         p = self.base / "proj" / "bad.jsonl"

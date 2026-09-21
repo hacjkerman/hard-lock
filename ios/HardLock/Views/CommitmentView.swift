@@ -21,6 +21,7 @@ struct CommitmentView: View {
                 Label("Locked in until \(lock.config.commitUntil!, style: .date)",
                       systemImage: "checkmark.seal.fill")
             }
+            if let error = lock.lastError { Text(error).foregroundStyle(.red) }
             Picker("Lock in for", selection: $choice) {
                 ForEach(options.indices, id: \.self) { Text(options[$0].0) }
             }
@@ -34,5 +35,7 @@ struct CommitmentView: View {
             }
         }
         .navigationTitle("Commitment")
+        .disabled(!lock.isReady)
+        .onChange(of: choice) { _ in confirming = false }
     }
 }

@@ -39,6 +39,7 @@ targets:
     sources:
       - path: ../HardLockMonitor
       - path: ../HardLock/Services/ShieldController.swift
+      - path: ../HardLock/Services/ScheduleManager.swift
     dependencies:
       - package: HardLockKit
     settings:

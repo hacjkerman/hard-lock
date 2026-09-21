@@ -97,3 +97,18 @@ public struct LockConfig: Codable, Equatable {
         return withCutoff(value, forWeekdayIndex: i)
     }
 }
+
+public enum ConfigValidationError: Error, LocalizedError {
+    case invalidRules
+    public var errorDescription: String? { "The saved lock rules are invalid. Shields have been cleared." }
+}
+
+public extension LockConfig {
+    func validate() throws {
+        guard (0..<24).contains(dayResetHour), (0...87600).contains(editCooldownHours),
+              (0..<7).allSatisfy({ cutoff(forWeekdayIndex: $0).map { LockRules.minutes(fromHHMM: $0) != nil } ?? true }),
+              pendingChanges.allSatisfy({ key, change in
+                  Self.weekdayKeys.contains(key) && (change.value.map { LockRules.minutes(fromHHMM: $0) != nil } ?? true)
+              }) else { throw ConfigValidationError.invalidRules }
+    }
+}

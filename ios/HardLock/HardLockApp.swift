@@ -8,7 +8,6 @@ struct HardLockApp: App {
         WindowGroup {
             StatusView()
                 .environmentObject(auth)
-                .task { await auth.requestAuthorization() }
         }
     }
 }

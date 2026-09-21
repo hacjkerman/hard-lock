@@ -39,11 +39,14 @@ public struct ConfigStore {
     /// this to decide to fail OPEN (clear shields) rather than guess.
     public func loadStrict() throws -> LockConfig {
         let data = try Data(contentsOf: fileURL)
-        return try ConfigStore.decoder.decode(LockConfig.self, from: data)
+        let config = try ConfigStore.decoder.decode(LockConfig.self, from: data)
+        try config.validate()
+        return config
     }
 
     /// Atomic write — a crash mid-save must never leave a truncated config.
     public func save(_ config: LockConfig) throws {
+        try config.validate()
         let data = try ConfigStore.encoder.encode(config)
         try data.write(to: fileURL, options: .atomic)
     }

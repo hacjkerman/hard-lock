@@ -13,6 +13,7 @@ public struct LockRules {
 
     /// "23:30" -> 1410 minutes past midnight. nil if malformed.
     public static func minutes(fromHHMM s: String) -> Int? {
+        guard s.utf8.count == 5, s.utf8.enumerated().allSatisfy({ $0.offset == 2 ? $0.element == 58 : (48...57).contains($0.element) }) else { return nil }
         let parts = s.split(separator: ":")
         guard parts.count == 2,
               let h = Int(parts[0]), let m = Int(parts[1]),
@@ -23,9 +24,10 @@ public struct LockRules {
     /// Start of the logical day containing `now` — the most recent day-reset
     /// boundary at or before it.
     public func logicalDayStart(now: Date) -> Date {
-        let midnight = calendar.startOfDay(for: now)
-        let reset = calendar.date(byAdding: .hour, value: config.dayResetHour, to: midnight)!
-        return now < reset ? calendar.date(byAdding: .day, value: -1, to: reset)! : reset
+        let reset = wallTime(hour: config.dayResetHour, minute: 0, on: now)
+        if now >= reset { return reset }
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: now))!
+        return wallTime(hour: config.dayResetHour, minute: 0, on: yesterday)
     }
 
     /// 0 = Monday … 6 = Sunday, for the logical day containing `now`.
@@ -38,7 +40,8 @@ public struct LockRules {
 
     /// When the current logical day ends (the next day reset).
     public func resetDate(now: Date) -> Date {
-        calendar.date(byAdding: .day, value: 1, to: logicalDayStart(now: now))!
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: logicalDayStart(now: now)))!
+        return wallTime(hour: config.dayResetHour, minute: 0, on: tomorrow)
     }
 
     /// The absolute instant of this logical day's cutoff, or nil if none is set.
@@ -49,17 +52,23 @@ public struct LockRules {
         guard let hhmm = config.cutoff(forWeekdayIndex: idx),
               let mins = LockRules.minutes(fromHHMM: hhmm) else { return nil }
 
-        let start = logicalDayStart(now: now)               // e.g. Fri 04:00
-        let dayMidnight = calendar.startOfDay(for: start)   // Fri 00:00
-        var cutoff = calendar.date(byAdding: .minute, value: mins, to: dayMidnight)!
+        var day = calendar.startOfDay(for: logicalDayStart(now: now))
         if mins < config.dayResetHour * 60 {
-            // 01:30 with a 04:00 reset => the small hours of the NEXT date.
-            cutoff = calendar.date(byAdding: .day, value: 1, to: cutoff)!
+            day = calendar.date(byAdding: .day, value: 1, to: day)!
         }
-        return cutoff
+        return wallTime(hour: mins / 60, minute: mins % 60, on: day)
     }
 
-    /// True while inside this logical day's lockout window (cutoff -> reset).
+    /// Resolve local clock components instead of adding elapsed hours over DST.
+    /// Missing times move forward; repeated times use the first occurrence.
+    private func wallTime(hour: Int, minute: Int, on day: Date) -> Date {
+        calendar.date(bySettingHour: hour, minute: minute, second: 0, of: day,
+                      matchingPolicy: .nextTime, repeatedTimePolicy: .first,
+                      direction: .forward)!
+    }
+
+    /// True while inside
+    /// this logical day's lockout window (cutoff -> reset).
     public func isLockedOut(now: Date) -> Bool {
         guard let cutoff = cutoffDate(now: now) else { return false }
         return now >= cutoff && now < resetDate(now: now)
@@ -94,13 +103,18 @@ public extension LockRules {
     /// Tightening applies immediately; weakening is queued for the cooldown;
     /// while committed, weakening is rejected outright rather than queued.
     func apply(changes: [String: String?], now: Date) -> ApplyResult {
-        var updated = config
+        var updated = refreshPending(now: now)
         var applied: [String] = [], deferred: [String] = [], rejected: [String] = []
         let committed = isCommitted(now: now)
         let effectiveAt = now.addingTimeInterval(TimeInterval(config.editCooldownHours) * 3600)
 
         for key in changes.keys.sorted() {
             let newValue = changes[key] ?? nil
+            guard LockConfig.weekdayKeys.contains(key),
+                  newValue == nil || Self.minutes(fromHHMM: newValue!) != nil else {
+                rejected.append(key)
+                continue
+            }
             let oldValue = updated.value(forKey: key)
             let queued = updated.pendingChanges[key]
 
@@ -125,7 +139,16 @@ public extension LockRules {
     /// Activate any queued change whose cooldown has elapsed.
     func refreshPending(now: Date) -> LockConfig {
         var updated = config
+        if isCommitted(now: now) {
+            updated.pendingChanges = [:]
+            return updated
+        }
         for (key, change) in config.pendingChanges where change.effectiveAt <= now {
+            guard LockConfig.weekdayKeys.contains(key),
+                  change.value == nil || Self.minutes(fromHHMM: change.value!) != nil else {
+                updated.pendingChanges.removeValue(forKey: key)
+                continue
+            }
             updated = updated.setting(change.value, forKey: key)
             updated.pendingChanges.removeValue(forKey: key)
         }
@@ -177,5 +200,40 @@ public extension LockRules {
     /// registered schedule regardless of which day it is.
     func cutoffApplies(hhmm: String, now: Date) -> Bool {
         config.cutoff(forWeekdayIndex: logicalWeekdayIndex(now: now)) == hhmm
+    }
+}
+
+public extension LockRules {
+    /// Register future values too so a closed app can enforce a matured edit.
+    /// At most fourteen cutoff schedules, plus one pending-change wakeup.
+    func monitoringCutoffTimes(now: Date) -> [String] {
+        let effective = refreshPending(now: now)
+        var times = Set(LockRules(config: effective, calendar: calendar).distinctCutoffTimes())
+        for change in effective.pendingChanges.values {
+            if let value = change.value, Self.minutes(fromHHMM: value) != nil { times.insert(value) }
+        }
+        return times.sorted()
+    }
+}
+
+/// A daily interval supported by DeviceActivity's minimum duration. Warnings
+/// let the monitor reconcile at cutoffs less than fifteen minutes before reset.
+public struct MonitoringWindow: Equatable {
+    public let startMinute: Int
+    public let endMinute: Int
+    public let warningMinutes: Int?
+}
+
+public extension LockRules {
+    func monitoringWindow(hhmm: String) -> MonitoringWindow? {
+        guard let mins = Self.minutes(fromHHMM: hhmm), (0..<24).contains(config.dayResetHour) else { return nil }
+        let reset = config.dayResetHour * 60
+        let duration = (reset - mins + 1440) % 1440
+        let short = duration < 15
+        return MonitoringWindow(
+            startMinute: short ? (reset - 15 + 1440) % 1440 : mins,
+            endMinute: reset,
+            warningMinutes: short && duration > 0 ? duration : nil
+        )
     }
 }

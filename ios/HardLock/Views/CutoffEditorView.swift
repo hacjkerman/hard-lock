@@ -15,25 +15,37 @@ struct CutoffEditorView: View {
                     .font(.footnote).foregroundStyle(.secondary)
             }
             ForEach(0..<7, id: \.self) { i in
-                DatePicker(
-                    dayNames[i],
-                    selection: Binding(
-                        get: { date(for: lock.config.cutoff(forWeekdayIndex: i)) },
-                        set: { newDate in setCutoff(hhmm(from: newDate), day: i) }
-                    ),
-                    displayedComponents: .hourAndMinute
-                )
+                Toggle("\(dayNames[i]) cutoff", isOn: Binding(
+                    get: { lock.config.cutoff(forWeekdayIndex: i) != nil },
+                    set: { enabled in setCutoff(enabled ? "23:30" : nil, day: i) }
+                ))
+                if lock.config.cutoff(forWeekdayIndex: i) != nil {
+                    DatePicker(
+                        dayNames[i],
+                        selection: Binding(
+                            get: { date(for: lock.config.cutoff(forWeekdayIndex: i)) },
+                            set: { newDate in setCutoff(hhmm(from: newDate), day: i) }
+                        ),
+                        displayedComponents: .hourAndMinute
+                    )
+                }
+            }
+            if let error = lock.lastError {
+                Text(error).foregroundStyle(.red)
             }
             if let message {
                 Section { Text(message).font(.footnote) }
             }
         }
         .navigationTitle("Cutoff times")
+        .disabled(!lock.isReady)
     }
 
-    private func setCutoff(_ value: String, day: Int) {
+    private func setCutoff(_ value: String?, day: Int) {
         let result = lock.apply([LockConfig.weekdayKeys[day]: value])
-        if !result.rejected.isEmpty {
+        if let error = lock.lastError {
+            message = error
+        } else if !result.rejected.isEmpty {
             message = "Locked in — you can't push a cutoff later until the commitment ends."
         } else if !result.deferred.isEmpty {
             message = "Queued — a later cutoff activates after your cooldown."

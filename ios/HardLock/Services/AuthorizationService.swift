@@ -1,3 +1,5 @@
+import Combine
+
 import Foundation
 import FamilyControls
 
@@ -15,6 +17,8 @@ public final class AuthorizationService: ObservableObject {
     }
 
     public func requestAuthorization() async {
+        refresh()
+        guard status != .approved else { return }
         do {
             // .individual = this device's own user, not a parent/child pairing.
             try await AuthorizationCenter.shared.requestAuthorization(for: .individual)

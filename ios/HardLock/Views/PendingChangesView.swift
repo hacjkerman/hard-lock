@@ -19,6 +19,7 @@ struct PendingChangesView: View {
                 if let change = lock.config.pendingChanges[key] {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("\(dayLabels[key] ?? key) → \(change.value ?? "none")")
+                        Button("Cancel queued change") { lock.cancelPending(key) }
                         Text("Activates \(change.effectiveAt, style: .relative) from now")
                             .font(.caption).foregroundStyle(.secondary)
                     }
@@ -26,5 +27,6 @@ struct PendingChangesView: View {
             }
         }
         .navigationTitle("Pending changes")
+        .disabled(!lock.isReady)
     }
 }

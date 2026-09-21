@@ -1,5 +1,6 @@
 import XCTest
 @testable import HardLockKit
+
 final class ConfigStoreTests: XCTestCase {
     var dir: URL!
 

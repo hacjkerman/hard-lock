@@ -22,3 +22,5 @@ HardLock-v*.zip
 ios/**/.build/
 ios/**/*.xcodeproj/
 ios/**/.swiftpm/
+# Local portable review branch (not app source)
+ios/review-artifacts/

@@ -25,6 +25,12 @@ Grab the latest `HardLock-vX.Y.Z-win64.zip` from the
 anywhere, and run `HardLock.exe`. Windows 10/11 64-bit. No installer, no admin
 needed to run (only to install the optional start-at-logon task).
 
+## iPhone
+
+There is an iOS companion that enforces a nightly cutoff using app shields — see
+[ios/README.md](ios/README.md). It has its own local settings. iOS cannot shut
+a phone down, so the companion requests category shields after the cutoff.
+
 ### "Windows protected your PC" / antivirus warnings
 
 The builds are **not code-signed**, so SmartScreen shows *"Windows protected

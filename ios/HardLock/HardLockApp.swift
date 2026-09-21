@@ -6,13 +6,9 @@ struct HardLockApp: App {
 
     var body: some Scene {
         WindowGroup {
-            VStack(spacing: 20) {
-                Text("Hard Lock").font(.largeTitle)
-                Button("Shield everything") { ShieldController().shieldEverything() }
-                Button("Clear shields") { ShieldController().clear() }
-            }
-            .environmentObject(auth)
-            .task { await auth.requestAuthorization() }
+            StatusView()
+                .environmentObject(auth)
+                .task { await auth.requestAuthorization() }
         }
     }
 }

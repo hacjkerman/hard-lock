@@ -4,7 +4,7 @@ import Foundation
 /// takes an explicit `now`, so behaviour is fully testable without waiting.
 public struct LockRules {
     public let config: LockConfig
-    private let calendar: Calendar
+    let calendar: Calendar
 
     public init(config: LockConfig, calendar: Calendar = .current) {
         self.config = config
@@ -178,12 +178,21 @@ public extension LockRules {
 
     /// Lock in for a term. Extend-only: never shortens an existing commitment.
     /// Queued weakenings are dropped — they cannot benefit you during the term.
+    /// A change that has already matured is part of the rules, not the queue.
     func commit(duration: TimeInterval, now: Date) -> LockConfig {
         let clamped = min(max(duration, 60), 10 * 365 * 24 * 3600)   // 1 min … ~10 years
-        var updated = config
+        var updated = refreshPending(now: now)
         let end = now.addingTimeInterval(clamped)
         updated.commitUntil = max(end, config.commitUntil ?? end)
         updated.pendingChanges = [:]
+        return updated
+    }
+
+    /// Withdraw a queued change, keeping the current rule. A change that has
+    /// already matured cannot be withdrawn this way.
+    func cancelPending(key: String, now: Date) -> LockConfig {
+        var updated = refreshPending(now: now)
+        updated.pendingChanges.removeValue(forKey: key)
         return updated
     }
 }
@@ -210,15 +219,80 @@ public extension LockRules {
     }
 }
 
-public extension LockRules {
-    /// DeviceActivity callbacks may arrive just before their wall-clock edge.
-    /// Look ahead at both cutoff and reset, including edits maturing at the edge.
-    func isLockedOutForMonitor(now: Date) -> Bool {
-        let evaluationDate = now.addingTimeInterval(60)
-        let effective = refreshPending(now: evaluationDate)
-        return LockRules(config: effective, calendar: calendar).isLockedOut(now: evaluationDate)
+/// The DeviceActivity activities Hard Lock registers, named as they were
+/// before this type existed so registrations survive an upgrade.
+public enum MonitorActivity: Equatable {
+    case cutoff(String)      // "HH:MM"
+    case pendingChange
+
+    public init?(rawValue: String) {
+        if rawValue == "pending_change" { self = .pendingChange; return }
+        guard rawValue.hasPrefix("cutoff_") else { return nil }
+        let suffix = rawValue.dropFirst("cutoff_".count)
+        guard !suffix.contains(":") else { return nil }
+        let hhmm = suffix.replacingOccurrences(of: "_", with: ":")
+        guard LockRules.minutes(fromHHMM: hhmm) != nil else { return nil }
+        self = .cutoff(hhmm)
     }
 
+    public var rawValue: String {
+        switch self {
+        case .cutoff(let hhmm): return "cutoff_" + hhmm.replacingOccurrences(of: ":", with: "_")
+        case .pendingChange: return "pending_change"
+        }
+    }
+}
+
+public enum MonitorCallback: Equatable {
+    case intervalStart, intervalEnd, endWarning
+}
+
+public extension LockRules {
+    /// How early a callback may arrive and still be judged at its own edge.
+    static let monitorEarlyTolerance: TimeInterval = 60
+
+    /// Judge a callback at the edge it was scheduled for when it arrives up to
+    /// a minute early; on-time, late or unrecognised callbacks use the actual
+    /// time. Nothing is advanced past an edge the callback does not represent.
+    func isLockedOutForMonitor(activity: MonitorActivity?, callback: MonitorCallback, now: Date) -> Bool {
+        var evaluation = now
+        if let edge = monitorEdge(activity: activity, callback: callback, now: now),
+           edge > now, edge.timeIntervalSince(now) <= Self.monitorEarlyTolerance {
+            evaluation = edge
+        }
+        let effective = refreshPending(now: evaluation)
+        return LockRules(config: effective, calendar: calendar).isLockedOut(now: evaluation)
+    }
+
+    /// The instant a callback was scheduled for, nearest to `now`.
+    func monitorEdge(activity: MonitorActivity?, callback: MonitorCallback, now: Date) -> Date? {
+        switch activity {
+        case .cutoff(let hhmm):
+            guard let window = monitoringWindow(hhmm: hhmm),
+                  let cutoff = Self.minutes(fromHHMM: hhmm) else { return nil }
+            switch callback {
+            case .intervalStart: return nearestWallTime(minute: window.startMinute, to: now)
+            case .intervalEnd: return nearestWallTime(minute: window.endMinute, to: now)
+            case .endWarning: return nearestWallTime(minute: cutoff, to: now)
+            }
+        case .pendingChange:
+            guard callback == .intervalStart else { return nil }
+            return config.pendingChanges.values.map(\.effectiveAt).filter { $0 > now }.min()
+        case nil:
+            return nil
+        }
+    }
+
+    private func nearestWallTime(minute: Int, to now: Date) -> Date {
+        let today = calendar.startOfDay(for: now)
+        return (-1...1)
+            .map { calendar.date(byAdding: .day, value: $0, to: today)! }
+            .map { wallTime(hour: minute / 60, minute: minute % 60, on: $0) }
+            .min { abs($0.timeIntervalSince(now)) < abs($1.timeIntervalSince(now)) }!
+    }
+}
+
+public extension LockRules {
     /// The app shields only with Screen Time access and an active lockout.
     func shouldShield(authorized: Bool, now: Date) -> Bool {
         authorized && isLockedOut(now: now)

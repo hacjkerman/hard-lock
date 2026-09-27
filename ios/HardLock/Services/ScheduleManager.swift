@@ -7,12 +7,12 @@ import HardLockKit
 public struct ScheduleManager {
     private let center = DeviceActivityCenter()
     private let store: ConfigStore
-    public static let pendingActivity = DeviceActivityName("pending_change")
+    public static let pendingActivity = DeviceActivityName(MonitorActivity.pendingChange.rawValue)
 
     public init(store: ConfigStore) { self.store = store }
 
     public static func activityName(for hhmm: String) -> DeviceActivityName {
-        DeviceActivityName("cutoff_" + hhmm.replacingOccurrences(of: ":", with: "_"))
+        DeviceActivityName(MonitorActivity.cutoff(hhmm).rawValue)
     }
 
     public func stopAll() {

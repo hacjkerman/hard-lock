@@ -70,29 +70,37 @@ final class RegressionTests: XCTestCase {
         let rules = LockRules(config: .default, calendar: testCalendar)
         let beforeCutoff = at(2026, 1, 9, 23, 30).addingTimeInterval(-1)
         let beforeReset = at(2026, 1, 10, 4, 0).addingTimeInterval(-1)
+        let cutoff = MonitorActivity.cutoff("23:30")
         XCTAssertFalse(rules.isLockedOut(now: beforeCutoff))
-        XCTAssertTrue(rules.isLockedOutForMonitor(now: beforeCutoff))
+        XCTAssertTrue(rules.isLockedOutForMonitor(activity: cutoff, callback: .intervalStart, now: beforeCutoff))
         XCTAssertTrue(rules.isLockedOut(now: beforeReset))
-        XCTAssertFalse(rules.isLockedOutForMonitor(now: beforeReset))
-        XCTAssertFalse(rules.isLockedOutForMonitor(now: beforeCutoff.addingTimeInterval(-60)))
+        XCTAssertFalse(rules.isLockedOutForMonitor(activity: cutoff, callback: .intervalEnd, now: beforeReset))
+        XCTAssertFalse(rules.isLockedOutForMonitor(activity: cutoff, callback: .intervalStart,
+                                                   now: beforeCutoff.addingTimeInterval(-60)))
     }
 
-    func testMonitorLookaheadHonorsWeekdayAndShortWindowWarning() {
+    func testMonitorHonorsWeekdayAndShortWindowWarning() {
         let config = LockConfig.default.withCutoff("03:59", forWeekdayIndex: 4)
             .withCutoff(nil, forWeekdayIndex: 5)
         let rules = LockRules(config: config, calendar: testCalendar)
-        XCTAssertFalse(rules.isLockedOutForMonitor(now: at(2026, 1, 10, 3, 45).addingTimeInterval(-1)))
-        XCTAssertTrue(rules.isLockedOutForMonitor(now: at(2026, 1, 10, 3, 59).addingTimeInterval(-1)))
-        XCTAssertFalse(rules.isLockedOutForMonitor(now: at(2026, 1, 10, 4, 0).addingTimeInterval(-1)))
-        XCTAssertFalse(rules.isLockedOutForMonitor(now: at(2026, 1, 10, 23, 30).addingTimeInterval(-1)))
+        let short = MonitorActivity.cutoff("03:59")
+        XCTAssertFalse(rules.isLockedOutForMonitor(activity: short, callback: .intervalStart,
+                                                   now: at(2026, 1, 10, 3, 45).addingTimeInterval(-1)))
+        XCTAssertTrue(rules.isLockedOutForMonitor(activity: short, callback: .endWarning,
+                                                  now: at(2026, 1, 10, 3, 59).addingTimeInterval(-1)))
+        XCTAssertFalse(rules.isLockedOutForMonitor(activity: short, callback: .intervalEnd,
+                                                   now: at(2026, 1, 10, 4, 0).addingTimeInterval(-1)))
+        XCTAssertFalse(rules.isLockedOutForMonitor(activity: .cutoff("23:30"), callback: .intervalStart,
+                                                   now: at(2026, 1, 10, 23, 30).addingTimeInterval(-1)))
     }
 
-    func testMonitorLookaheadUsesEditsMaturingAtEdge() {
+    func testMonitorUsesEditsMaturingAtEdge() {
         let cutoff = at(2026, 1, 9, 23, 30)
         var config = LockConfig.default
         config.pendingChanges["cutoff_fri"] = PendingChange(value: nil, effectiveAt: cutoff)
         XCTAssertFalse(LockRules(config: config, calendar: testCalendar)
-            .isLockedOutForMonitor(now: cutoff.addingTimeInterval(-1)))
+            .isLockedOutForMonitor(activity: .cutoff("23:30"), callback: .intervalStart,
+                                   now: cutoff.addingTimeInterval(-1)))
     }
 
     func testInvalidConfigFailsStrictLoad() throws {

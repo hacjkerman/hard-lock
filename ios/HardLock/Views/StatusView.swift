@@ -34,14 +34,21 @@ struct StatusView: View {
                 Section("Tonight") {
                     if !lock.isReady {
                         Text("Rules unavailable — shielding is off.")
-                    } else if lock.rules.isLockedOut(now: now) {
-                        Label("Locked out until \(lock.rules.resetDate(now: now), style: .time)",
-                              systemImage: "lock.fill")
-                    } else if let cutoff = lock.rules.cutoffDate(now: now) {
-                        Label("Locks at \(cutoff, style: .time) · \(cutoff, style: .relative)",
-                              systemImage: "clock")
                     } else {
-                        Label("No cutoff today", systemImage: "clock.badge.xmark")
+                        switch lock.rules.tonightStatus(authorized: auth.status == .approved, now: now) {
+                        case .lockedOut(let until):
+                            Label("Locked out until \(until, style: .time)", systemImage: "lock.fill")
+                        case .lockoutNotEnforced(let until):
+                            Label("Cutoff passed, but nothing is blocked without Screen Time access. The lockout would last until \(until, style: .time).",
+                                  systemImage: "lock.slash")
+                        case .locksAt(let cutoff, enforced: true):
+                            Label("Locks at \(cutoff, style: .time) · \(cutoff, style: .relative)", systemImage: "clock")
+                        case .locksAt(let cutoff, enforced: false):
+                            Label("Cutoff at \(cutoff, style: .time) won't be enforced without Screen Time access.",
+                                  systemImage: "clock.badge.exclamationmark")
+                        case .noCutoff:
+                            Label("No cutoff today", systemImage: "clock.badge.xmark")
+                        }
                     }
                 }
 

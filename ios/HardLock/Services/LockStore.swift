@@ -37,24 +37,32 @@ public final class LockStore: ObservableObject {
         } catch { fail(error.localizedDescription) }
     }
 
+    public enum CutoffSaveResult {
+        /// The rules moved since the preview; nothing was written.
+        case outdated(CutoffSaveOutcome)
+        case persisted(PersistOutcome)
+    }
+
+    /// Applies a draft once, against the rules as they are at this moment.
+    public func saveCutoff(_ draft: CutoffDraft, expecting shown: CutoffSaveOutcome) -> CutoffSaveResult {
+        guard isReady else { return .persisted(.notSaved(lastError ?? "Rules are unavailable.")) }
+        switch rules.decideSave(draft, expecting: shown, now: Date()) {
+        case .nothing: return .persisted(.unchanged)
+        case .outdated(let fresh): return .outdated(fresh)
+        case .apply(let result): return .persisted(persist(result.config))
+        }
+    }
+
     @discardableResult
-    public func apply(_ changes: [String: String?]) -> ApplyResult {
-        guard isReady else { return rules.apply(changes: [:], now: Date()) }
-        let result = rules.apply(changes: changes, now: Date())
-        persist(result.config)
-        return result
+    public func commit(_ duration: TimeInterval) -> PersistOutcome {
+        guard isReady else { return .notSaved(lastError ?? "Rules are unavailable.") }
+        return persist(rules.commit(duration: duration, now: Date()))
     }
 
-    public func commit(_ duration: TimeInterval) {
-        guard isReady else { return }
-        persist(rules.commit(duration: duration, now: Date()))
-    }
-
-    public func cancelPending(_ key: String) {
-        guard isReady else { return }
-        var updated = config
-        updated.pendingChanges.removeValue(forKey: key)
-        persist(updated)
+    @discardableResult
+    public func cancelPending(_ key: String) -> PersistOutcome {
+        guard isReady else { return .notSaved(lastError ?? "Rules are unavailable.") }
+        return persist(rules.cancelPending(key: key, now: Date()))
     }
 
     /// No polling writes or schedule registration on ordinary clock ticks.
@@ -67,14 +75,25 @@ public final class LockStore: ObservableObject {
         }
     }
 
-    private func persist(_ updated: LockConfig) {
-        guard let store else { return }
-        do {
-            try store.save(updated)
-            config = updated
-            try configure(store: store)
+    /// Saving and enforcing are reported separately. Either failure still
+    /// fails open: schedules stop and shields clear until Retry succeeds.
+    private func persist(_ updated: LockConfig) -> PersistOutcome {
+        guard let store else { return .notSaved("Shared storage is unavailable.") }
+        let outcome = ConfigPersistence.persist(
+            updated, over: config,
+            save: { try store.save($0); config = $0 },
+            arm: { try configure(store: store) })
+        switch outcome {
+        case .unchanged:
+            break
+        case .saved:
             lastError = nil
-        } catch { fail(error.localizedDescription) }
+        case .savedNotEnforced(let message):
+            fail("Saved, but enforcement couldn't start, so nothing is blocked until Retry succeeds. (\(message))")
+        case .notSaved(let message):
+            fail("Not saved, and nothing is blocked until Retry succeeds. (\(message))")
+        }
+        return outcome
     }
 
     private func configure(store: ConfigStore) throws {
@@ -87,10 +106,11 @@ public final class LockStore: ObservableObject {
         reconcile(now: Date())
     }
 
+    /// Writes to ManagedSettings only when the shield state has to change.
     private func reconcile(now: Date) {
         let locked = rules.shouldShield(authorized: AuthorizationCenter.shared.authorizationStatus == .approved, now: now)
         if locked && !shields.isShielding { shields.shieldEverything() }
-        if !locked { shields.clear() }
+        if !locked && shields.isShielding { shields.clear() }
     }
 
     private func fail(_ message: String) {

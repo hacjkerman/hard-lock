@@ -7,20 +7,21 @@ final class MonitorExtension: DeviceActivityMonitor {
 
     override func intervalDidStart(for activity: DeviceActivityName) {
         super.intervalDidStart(for: activity)
-        reconcile(activity: activity, rearmPending: true)
+        reconcile(activity: activity, callback: .intervalStart, rearmPending: true)
     }
 
     override func intervalDidEnd(for activity: DeviceActivityName) {
         super.intervalDidEnd(for: activity)
-        reconcile(activity: activity)
+        reconcile(activity: activity, callback: .intervalEnd)
     }
 
     override func intervalWillEndWarning(for activity: DeviceActivityName) {
         super.intervalWillEndWarning(for: activity)
-        reconcile(activity: activity)
+        reconcile(activity: activity, callback: .endWarning)
     }
 
-    private func reconcile(activity: DeviceActivityName, rearmPending: Bool = false) {
+    /// Each callback is judged at its own edge; see `isLockedOutForMonitor`.
+    private func reconcile(activity: DeviceActivityName, callback: MonitorCallback, rearmPending: Bool = false) {
         let now = Date()
         guard let store = ConfigStore.shared(), let saved = try? store.loadStrict() else {
             shields.clear()
@@ -31,7 +32,8 @@ final class MonitorExtension: DeviceActivityMonitor {
             do { try ScheduleManager(store: store).refreshSchedules(now: now) }
             catch { shields.clear(); return }
         }
-        if LockRules(config: saved).isLockedOutForMonitor(now: now) {
+        let kind = MonitorActivity(rawValue: activity.rawValue)
+        if LockRules(config: saved).isLockedOutForMonitor(activity: kind, callback: callback, now: now) {
             shields.shieldEverything()
         } else {
             shields.clear()

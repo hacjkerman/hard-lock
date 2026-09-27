@@ -38,15 +38,15 @@ In the Codex sandbox, Xcode package resolution remained blocked by `sandbox-exec
 
 ## Behavior and implementation
 
-Grant Screen Time access on first launch. The status screen warns when access is unavailable and displays storage or scheduling errors. It refreshes authorization when the app returns to the foreground.
+Grant Screen Time access on first launch. The status screen warns when access is unavailable and then describes a passed or upcoming cutoff as not enforced, never as locked. It displays storage or scheduling errors, stating whether an edit was saved. It refreshes authorization when the app returns to the foreground.
 
-Cutoff times can be edited or disabled per weekday. Removing a cutoff is weakening. Pending changes show their remaining delay and can be cancelled. Commitments offer 30, 90, 180, or 365 days and require a second confirmation; they discard queued weakening.
+Cutoff times shows one row per weekday with the saved time or Off, a Today marker, and any scheduled change with its activation time. Tapping a day opens a sheet holding a local draft: the on/off switch and time wheel change nothing until Save, and Cancel or swiping the sheet away discards the draft. Before saving, the sheet says whether the draft applies now, locks the phone now, waits the cooldown (and whether it restarts an existing wait), or is blocked by a commitment; Save re-checks that against the current rules and asks again if it changed. The reset hour is rejected in the sheet. Removing a cutoff is weakening. A scheduled change can be cancelled from the day sheet or Pending changes, keeping the current rule. Commitments offer 30, 90, 180, or 365 days and require a second confirmation; they discard queued weakening.
 
 `LockRules` uses an explicit clock and injected calendar. It resolves wall-clock dates across daylight-saving transitions: nonexistent times move forward to the next valid time, and repeated times use the first occurrence. `ConfigStore` atomically writes ISO-8601 JSON in the shared App Group.
 
-The app is the only config writer. The monitor reads effective rules at every callback, including matured pending changes, and reconciles shields. It registers current and future cutoff times plus one wakeup for the next pending change (at most 15 activities). Cutoffs less than 15 minutes before reset use an earlier interval start and an end warning at the actual cutoff. DeviceActivity callback timing and this warning path require device testing.
+The app is the only config writer. The monitor reads effective rules at every callback, including matured pending changes, and reconciles shields. It registers current and future cutoff times plus one wakeup for the next pending change (at most 15 activities). Cutoffs less than 15 minutes before reset use an earlier interval start and an end warning at the actual cutoff. Each callback is judged at the edge it was scheduled for (cutoff, reset, warning or maturity) when it arrives up to 60 seconds early, and at the actual time otherwise; nothing else is evaluated ahead of time. DeviceActivity callback timing and this warning path require device testing.
 
-A missing config is initialized by the app on first launch with no cutoffs (`LockConfig.freshInstall`), so granting access schedules and shields nothing. An existing saved schedule is kept as it is. `LockConfig.default`, 23:30 every night, still mirrors the desktop app's defaults. Turning a day's cutoff on sets it to 23:30 immediately, since adding a cutoff is tightening. Unreadable or invalid existing config is preserved and produces an error; the app does not silently overwrite a commitment with defaults. The monitor clears shields on read failure. Scheduling failures also clear shields and are visible in the app. Retry from Status after addressing the error.
+A missing config is initialized by the app on first launch with no cutoffs (`LockConfig.freshInstall`), so granting access schedules and shields nothing. An existing saved schedule is kept as it is. `LockConfig.default`, 23:30 every night, still mirrors the desktop app's defaults. A day switched on in the editor starts its draft at 23:30; nothing is saved until Save. Unreadable or invalid existing config is preserved and produces an error; the app does not silently overwrite a commitment with defaults. The monitor clears shields on read failure. Scheduling failures also clear shields and are visible in the app. Retry from Status after addressing the error.
 
 ## Honest limitations
 
@@ -60,7 +60,7 @@ A missing config is initialized by the app on first launch with no cutoffs (`Loc
 
 - On a fresh install, grant access and confirm Status shows no cutoff and nothing is shielded. Relaunch without a repeated prompt, revoke access in Settings, and confirm a warning on return.
 - Set today's cutoff a few minutes ahead, force-quit the app, and verify category shields apply. Check both third-party apps and web browsing.
-- Verify reset releases shields, including a cutoff one minute before reset and a cutoff equal to reset.
+- Verify reset releases shields, including a cutoff one minute before reset. Cutoffs in the reset hour are rejected.
 - Reboot before the cutoff and confirm enforcement still occurs.
 - Tighten a cutoff into the past and confirm shields apply immediately while the app is open.
 - Queue a later cutoff or removal, force-quit, and verify maturity changes enforcement without reopening. Check multiple queued changes with different deadlines.

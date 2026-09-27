@@ -4,24 +4,25 @@ import HardLockKit
 struct PendingChangesView: View {
     @ObservedObject var lock: LockStore
 
-    private let dayLabels = ["cutoff_mon": "Monday", "cutoff_tue": "Tuesday",
-                             "cutoff_wed": "Wednesday", "cutoff_thu": "Thursday",
-                             "cutoff_fri": "Friday", "cutoff_sat": "Saturday",
-                             "cutoff_sun": "Sunday"]
-
     var body: some View {
         List {
+            if let error = lock.lastError {
+                Section {
+                    Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red)
+                }
+            }
             if lock.config.pendingChanges.isEmpty {
                 Text("Nothing queued. Tightening changes apply immediately and never appear here.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
             ForEach(lock.config.pendingChanges.keys.sorted(), id: \.self) { key in
-                if let change = lock.config.pendingChanges[key] {
+                if let change = lock.config.pendingChanges[key],
+                   let day = LockConfig.weekdayKeys.firstIndex(of: key) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("\(dayLabels[key] ?? key) → \(change.value ?? "none")")
-                        Button("Cancel queued change") { lock.cancelPending(key) }
-                        Text("Activates \(change.effectiveAt, style: .relative) from now")
+                        Text("\(CutoffFormat.dayName(day)): \(CutoffFormat.time(lock.config.value(forKey: key))) → \(CutoffFormat.time(change.value))")
+                        Text("Activates \(CutoffFormat.moment(change.effectiveAt)) · \(change.effectiveAt, style: .relative)")
                             .font(.caption).foregroundStyle(.secondary)
+                        Button("Cancel queued change") { lock.cancelPending(key) }
                     }
                 }
             }

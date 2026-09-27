@@ -64,7 +64,9 @@ final class FreshInstallTests: XCTestCase {
         for minute in stride(from: 0, to: 8 * 24 * 60, by: 5) {
             let now = start.addingTimeInterval(TimeInterval(minute * 60))
             XCTAssertFalse(rules.shouldShield(authorized: true, now: now), "\(now)")
-            XCTAssertFalse(rules.isLockedOutForMonitor(now: now), "\(now)")
+            for callback in [MonitorCallback.intervalStart, .intervalEnd, .endWarning] {
+                XCTAssertFalse(rules.isLockedOutForMonitor(activity: nil, callback: callback, now: now), "\(now)")
+            }
         }
     }
 

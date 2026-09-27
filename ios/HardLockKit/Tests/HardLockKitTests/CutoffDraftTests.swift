@@ -55,14 +55,14 @@ final class CutoffDraftTests: XCTestCase {
         var draft = CutoffDraft(config: .default, dayIndex: sunday)
         draft.time = "23:45"
         XCTAssertEqual(rules(.default).preview(draft, now: sundayEvening),
-                       .waits(until: sundayEvening.addingTimeInterval(24 * 3600), replacesScheduled: false))
+                       .waits(until: sundayEvening.addingTimeInterval(24 * 3600), keeps: "23:30", replacesScheduled: false))
     }
 
     func testTurningOffWaitsForCooldown() {
         var draft = CutoffDraft(config: .default, dayIndex: sunday)
         draft.isEnabled = false
         XCTAssertEqual(rules(.default).preview(draft, now: sundayEvening),
-                       .waits(until: sundayEvening.addingTimeInterval(24 * 3600), replacesScheduled: false))
+                       .waits(until: sundayEvening.addingTimeInterval(24 * 3600), keeps: "23:30", replacesScheduled: false))
     }
 
     /// A queued Off must open as Off, and saving it unchanged must not cancel
@@ -84,8 +84,8 @@ final class CutoffDraftTests: XCTestCase {
         config.pendingChanges["cutoff_sun"] = PendingChange(value: nil, effectiveAt: sundayEvening.addingTimeInterval(3600))
         var draft = CutoffDraft(config: config, dayIndex: sunday)
         draft.isEnabled = true
-        XCTAssertEqual(rules(config).preview(draft, now: sundayEvening), .cancelsScheduled)
-        guard case .apply(let result) = rules(config).decideSave(draft, expecting: .cancelsScheduled, now: sundayEvening)
+        XCTAssertEqual(rules(config).preview(draft, now: sundayEvening), .cancelsScheduled(keeps: "23:30"))
+        guard case .apply(let result) = rules(config).decideSave(draft, expecting: .cancelsScheduled(keeps: "23:30"), now: sundayEvening)
         else { return XCTFail("expected a save") }
         XCTAssertEqual(result.config.cutoffSun, "23:30")
         XCTAssertTrue(result.config.pendingChanges.isEmpty)
@@ -98,7 +98,53 @@ final class CutoffDraftTests: XCTestCase {
         XCTAssertEqual(draft.time, "23:45")
         draft.time = "23:50"
         XCTAssertEqual(rules(config).preview(draft, now: sundayEvening),
-                       .waits(until: sundayEvening.addingTimeInterval(24 * 3600), replacesScheduled: true))
+                       .waits(until: sundayEvening.addingTimeInterval(24 * 3600), keeps: "23:30", replacesScheduled: true))
+    }
+
+    /// Codex review of 3434f5a: a queued 23:30 -> 01:00 matures while a 02:00
+    /// draft is open. The explanation must name 01:00, not the snapshot.
+    func testMaturationWhileEditingUpdatesWhatStays() {
+        var config = LockConfig.default
+        let due = sundayEvening.addingTimeInterval(60)
+        config.pendingChanges["cutoff_sun"] = PendingChange(value: "01:00", effectiveAt: due)
+        var draft = CutoffDraft(config: config, dayIndex: sunday)
+        XCTAssertEqual(draft.saved, "23:30")
+        draft.time = "02:00"
+        let before = rules(config).preview(draft, now: sundayEvening)
+        XCTAssertEqual(before, .waits(until: sundayEvening.addingTimeInterval(24 * 3600), keeps: "23:30", replacesScheduled: true))
+        let after = rules(config).preview(draft, now: due)
+        XCTAssertEqual(after, .waits(until: due.addingTimeInterval(24 * 3600), keeps: "01:00", replacesScheduled: false))
+        XCTAssertEqual(rules(config).decideSave(draft, expecting: before, now: due), .outdated(after))
+        guard case .apply(let result) = rules(config).decideSave(draft, expecting: after, now: due)
+        else { return XCTFail("expected a save") }
+        XCTAssertEqual(result.config.cutoffSun, "01:00")
+        XCTAssertEqual(result.config.pendingChanges["cutoff_sun"]?.value, "02:00")
+    }
+
+    func testMaturationWhileEditingTurnsCancelIntoNoChangeOrTightening() {
+        var config = LockConfig.default
+        let due = sundayEvening.addingTimeInterval(60)
+        config.pendingChanges["cutoff_sun"] = PendingChange(value: "01:00", effectiveAt: due)
+        var draft = CutoffDraft(config: config, dayIndex: sunday)
+        draft.time = "23:30"
+        XCTAssertEqual(rules(config).preview(draft, now: sundayEvening), .cancelsScheduled(keeps: "23:30"))
+        XCTAssertEqual(rules(config).preview(draft, now: due), .appliesNow(locksNow: false))
+        XCTAssertEqual(rules(config).decideSave(draft, expecting: .cancelsScheduled(keeps: "23:30"), now: due),
+                       .outdated(.appliesNow(locksNow: false)))
+    }
+
+    func testWithdrawOnlyWhatWasConfirmed() {
+        var config = LockConfig.default
+        let due = sundayEvening.addingTimeInterval(60)
+        let change = PendingChange(value: "01:00", effectiveAt: due)
+        config.pendingChanges["cutoff_sun"] = change
+        let r = rules(config)
+        let withdrawn = r.withdrawScheduled(key: "cutoff_sun", shownSaved: "23:30", shownChange: change, now: sundayEvening)
+        XCTAssertEqual(withdrawn?.cutoffSun, "23:30")
+        XCTAssertEqual(withdrawn?.pendingChanges.isEmpty, true)
+        XCTAssertNil(r.withdrawScheduled(key: "cutoff_sun", shownSaved: "23:30", shownChange: change, now: due))
+        let replaced = PendingChange(value: nil, effectiveAt: due)
+        XCTAssertNil(r.withdrawScheduled(key: "cutoff_sun", shownSaved: "23:30", shownChange: replaced, now: sundayEvening))
     }
 
     func testCommitmentBlocksLaterTimesButAllowsEarlier() {

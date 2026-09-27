@@ -35,9 +35,11 @@ public enum CutoffSaveOutcome: Equatable {
     case noChange
     case invalidResetHour
     case appliesNow(locksNow: Bool)
-    /// Returns to the saved value, withdrawing the queued change.
-    case cancelsScheduled
-    case waits(until: Date, replacesScheduled: Bool)
+    /// Returns to the saved value, withdrawing the queued change. `keeps` is
+    /// the effective saved value at the preview's `now`.
+    case cancelsScheduled(keeps: String?)
+    /// `keeps` stays in force until `until`.
+    case waits(until: Date, keeps: String?, replacesScheduled: Bool)
     case blockedByCommitment(until: Date)
 
     public var canSave: Bool {
@@ -50,7 +52,9 @@ public enum CutoffSaveOutcome: Equatable {
     /// Same consequence for the user; a cooldown deadline moving on with the
     /// clock doesn't make a preview stale.
     public func isEquivalent(to other: CutoffSaveOutcome) -> Bool {
-        if case .waits(_, let a) = self, case .waits(_, let b) = other { return a == b }
+        if case .waits(_, let keptA, let a) = self, case .waits(_, let keptB, let b) = other {
+            return keptA == keptB && a == b
+        }
         return self == other
     }
 }
@@ -74,10 +78,11 @@ public extension LockRules {
             return .blockedByCommitment(until: config.commitUntil ?? now)
         }
         if result.deferred.contains(key), let queued = result.config.pendingChanges[key] {
-            return .waits(until: queued.effectiveAt, replacesScheduled: current.pendingChanges[key] != nil)
+            return .waits(until: queued.effectiveAt, keeps: current.value(forKey: key),
+                          replacesScheduled: current.pendingChanges[key] != nil)
         }
         if result.applied.contains(key) {
-            if draft.value == current.value(forKey: key) { return .cancelsScheduled }
+            if draft.value == current.value(forKey: key) { return .cancelsScheduled(keeps: draft.value) }
             let before = LockRules(config: current, calendar: calendar).isLockedOut(now: now)
             let after = LockRules(config: result.config, calendar: calendar).isLockedOut(now: now)
             return .appliesNow(locksNow: after && !before)
@@ -92,6 +97,18 @@ public extension LockRules {
         guard fresh.isEquivalent(to: shown) else { return .outdated(fresh) }
         guard fresh.canSave else { return .nothing }
         return .apply(apply(changes: [draft.key: draft.value], now: now))
+    }
+}
+
+public extension LockRules {
+    /// Withdraws the queued change for a day only if the effective rules at
+    /// `now` still match what the user confirmed; nil when they have moved on
+    /// (the change matured, or was replaced or dropped).
+    func withdrawScheduled(key: String, shownSaved: String?, shownChange: PendingChange, now: Date) -> LockConfig? {
+        let current = refreshPending(now: now)
+        guard current.value(forKey: key) == shownSaved,
+              current.pendingChanges[key] == shownChange else { return nil }
+        return cancelPending(key: key, now: now)
     }
 }
 

@@ -1,6 +1,6 @@
 # Hard Lock iOS cutoff editor and review fixes — Claude, 2026-09-27
 
-All seven findings in `hard-lock-comprehensive-review-2026-09-27.md` are fixed on `worktree-ios-device-build`, with regression tests and the editor redesign. Package tests pass (94) and the unsigned device build succeeds. **Not installed, pushed or merged**; waiting for Codex review.
+All seven findings in `hard-lock-comprehensive-review-2026-09-27.md` are fixed on `worktree-ios-device-build`, with regression tests and the editor redesign. Package tests pass (97) and the unsigned device build succeeds. **Not installed, pushed or merged**; waiting for Codex review.
 
 ## Design
 
@@ -38,7 +38,7 @@ The config format is unchanged and no migration runs, so saved schedules load as
 
 | Check | Result |
 | --- | --- |
-| `swift test` in `ios/HardLockKit` on the Mac (README flags) | **94 tests, 0 failures** (53 before + 41 new) |
+| `swift test` in `ios/HardLockKit` on the Mac (README flags) | **97 tests, 0 failures** (53 before + 44 new) |
 | `xcodebuild build`, Debug, `generic/platform=iOS`, `CODE_SIGNING_ALLOWED=NO`, Xcode 26.2 | **BUILD SUCCEEDED**, no Swift warnings, `HardLockMonitor.appex` embedded |
 | `git diff --check` | clean |
 
@@ -51,6 +51,14 @@ Both ran from a temporary copy (`/tmp/hardlock-claude-0927`) and again in the Ma
 - Monitor callback delivery, early/late timing and shield ordering between the app and the extension still need the supervised device checklist.
 - The new tests were written before the implementation and failed to compile against the old API; they were not separately run against the old rules. The review's reproduction script targets the removed `isLockedOutForMonitor(now:)` and no longer compiles.
 
+## Review round 1 (Codex, `3434f5a`)
+
+The sheet explained waits and cancellations with `draft.saved`, the value when the sheet opened. If a queued 23:30 → 01:00 matured while a 02:00 draft was open, *Now* showed 01:00 but the outcome said 23:30 stayed.
+
+- `CutoffSaveOutcome.waits` and `.cancelsScheduled` now carry `keeps`, the effective saved value at the preview's own `now`, and the sheet renders only that. A changed `keeps` makes Save's re-check report the preview as outdated.
+- The cancellation dialog now captures the day as shown when it opened and displays those values. Confirming calls `LockRules.withdrawScheduled`, which writes only if the effective saved value and queued change still match; otherwise nothing is written and the sheet says the change already took effect or changed.
+- Tests (3): maturation while editing a later draft (explanation 23:30 → 01:00, stale Save outdated, fresh Save queues 02:00 over 01:00); a cancel-draft becoming tightening after maturation; withdrawal refused after maturity or replacement.
+
 ## Next
 
-Codex reviews `6305ea2..HEAD`. After approval, install with `ios/scripts/install-on-phone.sh` in the Mac's GUI session, then run the device checklist, starting with editing a day and cancelling, and a one-minute-before-reset cutoff.
+Codex gives the final review of `6305ea2..HEAD`. After approval, install with `ios/scripts/install-on-phone.sh` in the Mac's GUI session, then run the device checklist, starting with editing a day and cancelling, and a one-minute-before-reset cutoff.

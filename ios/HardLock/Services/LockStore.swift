@@ -65,6 +65,15 @@ public final class LockStore: ObservableObject {
         return persist(rules.cancelPending(key: key, now: Date()))
     }
 
+    /// Withdraws a day's queued change only if the saved value and queued
+    /// change are still the ones the user confirmed.
+    public func withdrawScheduled(_ key: String, shownSaved: String?, shownChange: PendingChange) -> CutoffSaveResult? {
+        guard isReady else { return .persisted(.notSaved(lastError ?? "Rules are unavailable.")) }
+        guard let updated = rules.withdrawScheduled(key: key, shownSaved: shownSaved,
+                                                    shownChange: shownChange, now: Date()) else { return nil }
+        return .persisted(persist(updated))
+    }
+
     /// No polling writes or schedule registration on ordinary clock ticks.
     public func tick(now: Date) {
         guard isReady else { return }

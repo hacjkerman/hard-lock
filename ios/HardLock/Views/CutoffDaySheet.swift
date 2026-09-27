@@ -8,7 +8,8 @@ struct CutoffDaySheet: View {
     @State private var draft: CutoffDraft
     @State private var now = Date()
     @State private var notice: String?
-    @State private var confirmingWithdraw = false
+    /// The day as shown when the user asked to cancel its scheduled change.
+    @State private var withdrawing: CutoffDaySummary?
     @Environment(\.dismiss) private var dismiss
 
     private let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -38,7 +39,7 @@ struct CutoffDaySheet: View {
                             }
                         }
                         Button("Keep \(CutoffFormat.time(current.saved)) and cancel this change") {
-                            confirmingWithdraw = true
+                            withdrawing = current
                         }
                     }
                 }
@@ -58,7 +59,7 @@ struct CutoffDaySheet: View {
                 }
 
                 Section {
-                    OutcomeLabel(outcome: outcome, draft: draft, lock: lock, now: now)
+                    OutcomeLabel(outcome: outcome, lock: lock, now: now)
                     if let notice {
                         Label(notice, systemImage: "info.circle").foregroundStyle(.orange)
                     }
@@ -76,10 +77,10 @@ struct CutoffDaySheet: View {
                         .disabled(!outcome.canSave || !lock.isReady)
                 }
             }
-            .confirmationDialog("Cancel the scheduled change?", isPresented: $confirmingWithdraw,
-                                titleVisibility: .visible) {
-                Button("Keep \(CutoffFormat.time(current.saved))") { withdrawScheduled() }
-            } message: {
+            .confirmationDialog("Cancel the scheduled change?", isPresented: withdrawingBinding,
+                                titleVisibility: .visible, presenting: withdrawing) { shown in
+                Button("Keep \(CutoffFormat.time(shown.saved))") { withdrawScheduled(shown) }
+            } message: { _ in
                 Text("Changing it again later means waiting the full \(lock.config.editCooldownHours) hours.")
             }
         }
@@ -106,10 +107,24 @@ struct CutoffDaySheet: View {
         }
     }
 
-    private func withdrawScheduled() {
-        if case .notSaved(let message) = lock.cancelPending(draft.key) {
+    private var withdrawingBinding: Binding<Bool> {
+        Binding(get: { withdrawing != nil }, set: { if !$0 { withdrawing = nil } })
+    }
+
+    /// Acts only on the values the dialog showed; if the change matured or
+    /// moved while it was open, nothing is written.
+    private func withdrawScheduled(_ shown: CutoffDaySummary) {
+        guard let change = shown.scheduled else { return }
+        switch lock.withdrawScheduled(draft.key, shownSaved: shown.saved, shownChange: change) {
+        case nil:
+            now = Date()
+            notice = "The scheduled change already took effect or changed. Nothing was cancelled."
+            return
+        case .persisted(.notSaved(let message)):
             notice = message
             return
+        default:
+            break
         }
         draft = CutoffDraft(config: lock.rules.refreshPending(now: Date()), dayIndex: draft.dayIndex)
     }
@@ -117,7 +132,6 @@ struct CutoffDaySheet: View {
 
 private struct OutcomeLabel: View {
     let outcome: CutoffSaveOutcome
-    let draft: CutoffDraft
     @ObservedObject var lock: LockStore
     let now: Date
 
@@ -133,12 +147,12 @@ private struct OutcomeLabel: View {
         case .appliesNow(locksNow: true):
             Label("Saving locks your phone now, until \(lock.rules.resetDate(now: now).formatted(date: .omitted, time: .shortened)).",
                   systemImage: "lock.fill").foregroundStyle(.red)
-        case .cancelsScheduled:
-            Label("Keeps \(CutoffFormat.time(draft.saved)) and cancels the scheduled change.",
+        case .cancelsScheduled(let keeps):
+            Label("Keeps \(CutoffFormat.time(keeps)) and cancels the scheduled change.",
                   systemImage: "arrow.uturn.backward.circle")
-        case .waits(let until, let replaces):
+        case .waits(let until, let keeps, let replaces):
             VStack(alignment: .leading, spacing: 4) {
-                Label("Takes effect \(CutoffFormat.moment(until)), after the \(lock.config.editCooldownHours)-hour wait. \(CutoffFormat.time(draft.saved)) stays until then.",
+                Label("Takes effect \(CutoffFormat.moment(until)), after the \(lock.config.editCooldownHours)-hour wait. \(CutoffFormat.time(keeps)) stays until then.",
                       systemImage: "hourglass").foregroundStyle(.orange)
                 if replaces {
                     Text("Replaces the scheduled change and restarts the wait.")

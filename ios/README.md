@@ -8,7 +8,7 @@ A time such as Friday 01:30 belongs to Friday night, early Saturday morning. The
 
 - iOS 16 or later and a physical iPhone for Family Controls verification.
 - This checkout was prepared for Xcode 26.2 (17C52), iOS SDK 26.2, and XcodeGen 2.46 at `/opt/homebrew/bin/xcodegen`.
-- Both targets use automatic signing with team `DT8S9V23B6`, bundle IDs `com.hardlock.ios` and `com.hardlock.ios.monitor`, and App Group `group.com.hardlock.ios`. Both require Family Controls entitlements. Device/distribution provisioning still needs verification.
+- Both targets use automatic signing with team `DT8S9V23B6`, bundle IDs `com.hardlock.ios` and `com.hardlock.ios.monitor`, and App Group `group.com.hardlock.ios`. Both require Family Controls entitlements. On 2026-09-27 the unsigned device build succeeded with the monitor embedded, but no Hard Lock provisioning profiles exist yet and Xcode on the Mac has no signed-in account, so device signing is unverified.
 
 From the repository root:
 
@@ -20,6 +20,8 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild build \
 ```
 
 The generated `.xcodeproj` is ignored; `project.yml` is authoritative. Open `ios/App/HardLock.xcodeproj`, select your physical device, and run to test authorization and shielding. The app links the local `../HardLockKit` package; the extension links it too.
+
+To install on the phone without opening Xcode's UI, sign in to Xcode once (Settings > Accounts), then run `ios/scripts/install-on-phone.sh` in Terminal on the Mac. It lets Xcode create the development profiles, checks that both bundles carry Family Controls and the App Group, and installs without launching. It does not work over SSH, where the login keychain is unavailable.
 
 Do not run simulator-hosted tests on the shared 8 GB Mac. They can start another simulator and disrupt live services. Run all rules and persistence tests on macOS instead:
 

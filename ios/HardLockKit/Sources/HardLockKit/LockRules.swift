@@ -219,6 +219,11 @@ public extension LockRules {
         return LockRules(config: effective, calendar: calendar).isLockedOut(now: evaluationDate)
     }
 
+    /// The app shields only with Screen Time access and an active lockout.
+    func shouldShield(authorized: Bool, now: Date) -> Bool {
+        authorized && isLockedOut(now: now)
+    }
+
     /// Register future values too so a closed app can enforce a matured edit.
     /// At most fourteen cutoff schedules, plus one pending-change wakeup.
     func monitoringCutoffTimes(now: Date) -> [String] {

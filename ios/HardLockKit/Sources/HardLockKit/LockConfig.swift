@@ -45,10 +45,21 @@ public struct LockConfig: Codable, Equatable {
         case commitUntil = "commit_until"
     }
 
+    /// The desktop app's defaults: 23:30 every night.
     public static let `default` = LockConfig(
         cutoffMon: "23:30", cutoffTue: "23:30", cutoffWed: "23:30",
         cutoffThu: "23:30", cutoffFri: "23:30", cutoffSat: "23:30",
         cutoffSun: "23:30",
+        dayResetHour: 4, editCooldownHours: 24,
+        pendingChanges: [:], commitUntil: nil
+    )
+
+    /// What a new iOS install starts with: no lock times, so granting Screen
+    /// Time access arms nothing until the user sets a cutoff.
+    public static let freshInstall = LockConfig(
+        cutoffMon: nil, cutoffTue: nil, cutoffWed: nil,
+        cutoffThu: nil, cutoffFri: nil, cutoffSat: nil,
+        cutoffSun: nil,
         dayResetHour: 4, editCooldownHours: 24,
         pendingChanges: [:], commitUntil: nil
     )

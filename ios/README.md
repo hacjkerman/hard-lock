@@ -2,13 +2,13 @@
 
 Hard Lock requests shields for all application and web-domain categories after a per-day nightly cutoff. Earlier cutoffs apply immediately; later cutoffs and removing a cutoff wait 24 hours by default. A fixed-term commitment rejects weakening and can only be extended.
 
-A time such as Friday 01:30 belongs to Friday night, early Saturday morning. The logical day resets at 04:00. Settings are local to this app; there is no network, analytics, account, or desktop sync.
+A time such as Friday 01:30 belongs to Friday night, early Saturday morning. The logical day resets at 04:00. A new install starts with no cutoffs, so nothing is blocked until you set one. Settings are local to this app; there is no network, analytics, account, or desktop sync.
 
 ## Requirements and build
 
 - iOS 16 or later and a physical iPhone for Family Controls verification.
 - This checkout was prepared for Xcode 26.2 (17C52), iOS SDK 26.2, and XcodeGen 2.46 at `/opt/homebrew/bin/xcodegen`.
-- Both targets use automatic signing with team `DT8S9V23B6`, bundle IDs `com.hardlock.ios` and `com.hardlock.ios.monitor`, and App Group `group.com.hardlock.ios`. Both require Family Controls entitlements. On 2026-09-27 the unsigned device build succeeded with the monitor embedded, but no Hard Lock provisioning profiles exist yet and Xcode on the Mac has no signed-in account, so device signing is unverified.
+- Both targets use automatic signing with team `DT8S9V23B6`, bundle IDs `com.hardlock.ios` and `com.hardlock.ios.monitor`, and App Group `group.com.hardlock.ios`. Both require Family Controls entitlements. On 2026-09-27 the unsigned device build succeeded with the monitor embedded, but no Hard Lock provisioning profiles exist yet, so device signing is unverified.
 
 From the repository root:
 
@@ -21,7 +21,7 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild build \
 
 The generated `.xcodeproj` is ignored; `project.yml` is authoritative. Open `ios/App/HardLock.xcodeproj`, select your physical device, and run to test authorization and shielding. The app links the local `../HardLockKit` package; the extension links it too.
 
-To install on the phone without opening Xcode's UI, sign in to Xcode once (Settings > Accounts), then run `ios/scripts/install-on-phone.sh` in Terminal on the Mac. It lets Xcode create the development profiles, checks that both bundles carry Family Controls and the App Group, and installs without launching. It does not work over SSH, where the login keychain is unavailable.
+To install on the phone without opening Xcode's UI, sign in to Xcode once (Settings > Accounts), then run `ios/scripts/install-on-phone.sh` in Terminal on the Mac. It lets Xcode create the development profiles, requires both signed bundles to grant Family Controls as `true` and list `group.com.hardlock.ios` in their application groups, and installs without launching. Each run builds in its own temporary directory and prints where its logs are kept. It does not work over SSH, where the login keychain is unavailable. `ios/scripts/test-install-on-phone.sh` checks the script on macOS against stand-in tools, without building, signing or touching the phone.
 
 Do not run simulator-hosted tests on the shared 8 GB Mac. They can start another simulator and disrupt live services. Run all rules and persistence tests on macOS instead:
 
@@ -46,7 +46,7 @@ Cutoff times can be edited or disabled per weekday. Removing a cutoff is weakeni
 
 The app is the only config writer. The monitor reads effective rules at every callback, including matured pending changes, and reconciles shields. It registers current and future cutoff times plus one wakeup for the next pending change (at most 15 activities). Cutoffs less than 15 minutes before reset use an earlier interval start and an end warning at the actual cutoff. DeviceActivity callback timing and this warning path require device testing.
 
-A missing config is initialized by the app on first launch. Unreadable or invalid existing config is preserved and produces an error; the app does not silently overwrite a commitment with defaults. The monitor clears shields on read failure. Scheduling failures also clear shields and are visible in the app. Retry from Status after addressing the error.
+A missing config is initialized by the app on first launch with no cutoffs (`LockConfig.freshInstall`), so granting access schedules and shields nothing. An existing saved schedule is kept as it is. `LockConfig.default`, 23:30 every night, still mirrors the desktop app's defaults. Turning a day's cutoff on sets it to 23:30 immediately, since adding a cutoff is tightening. Unreadable or invalid existing config is preserved and produces an error; the app does not silently overwrite a commitment with defaults. The monitor clears shields on read failure. Scheduling failures also clear shields and are visible in the app. Retry from Status after addressing the error.
 
 ## Honest limitations
 
@@ -58,7 +58,7 @@ A missing config is initialized by the app on first launch. Unreadable or invali
 
 ## Physical-device acceptance checklist
 
-- Grant access, relaunch without a repeated prompt, revoke access in Settings, and confirm a warning on return.
+- On a fresh install, grant access and confirm Status shows no cutoff and nothing is shielded. Relaunch without a repeated prompt, revoke access in Settings, and confirm a warning on return.
 - Set today's cutoff a few minutes ahead, force-quit the app, and verify category shields apply. Check both third-party apps and web browsing.
 - Verify reset releases shields, including a cutoff one minute before reset and a cutoff equal to reset.
 - Reboot before the cutoff and confirm enforcement still occurs.

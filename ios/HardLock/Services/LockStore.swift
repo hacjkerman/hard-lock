@@ -7,7 +7,7 @@ import HardLockKit
 /// commitment with defaults; a failed write never publishes an unsaved edit.
 @MainActor
 public final class LockStore: ObservableObject {
-    @Published public private(set) var config = LockConfig.default
+    @Published public private(set) var config = LockConfig.freshInstall
     @Published public private(set) var lastError: String?
     @Published public private(set) var isReady = false
 
@@ -27,12 +27,7 @@ public final class LockStore: ObservableObject {
             return
         }
         do {
-            let saved: LockConfig
-            do { saved = try store.loadStrict() }
-            catch let error as CocoaError where error.code == .fileReadNoSuchFile {
-                saved = .default
-                try store.save(saved)
-            }
+            let saved = try store.loadOrCreate()
             let refreshed = LockRules(config: saved).refreshPending(now: Date())
             if refreshed != saved { try store.save(refreshed) }
             config = refreshed
@@ -93,7 +88,7 @@ public final class LockStore: ObservableObject {
     }
 
     private func reconcile(now: Date) {
-        let locked = AuthorizationCenter.shared.authorizationStatus == .approved && rules.isLockedOut(now: now)
+        let locked = rules.shouldShield(authorized: AuthorizationCenter.shared.authorizationStatus == .approved, now: now)
         if locked && !shields.isShielding { shields.shieldEverything() }
         if !locked { shields.clear() }
     }

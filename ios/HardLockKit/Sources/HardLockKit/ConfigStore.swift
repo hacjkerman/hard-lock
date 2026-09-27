@@ -44,6 +44,16 @@ public struct ConfigStore {
         return config
     }
 
+    /// The app's startup read. Only a missing file is created, with no lock
+    /// times; an unreadable one throws and is left untouched.
+    public func loadOrCreate() throws -> LockConfig {
+        do { return try loadStrict() }
+        catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+            try save(.freshInstall)
+            return .freshInstall
+        }
+    }
+
     /// Atomic write — a crash mid-save must never leave a truncated config.
     public func save(_ config: LockConfig) throws {
         try config.validate()

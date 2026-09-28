@@ -57,12 +57,18 @@ tasks — the same behaviours malware uses. The source is all here if you'd rath
 - **Don't-kill-my-game** — if a configured game (League of Legends by default) is
   in progress when a limit is hit, the shutdown is held until the game ends plus
   a buffer (3 min by default). See `defer_for_games` / `game_defer_grace_seconds`.
-- **Wait for Claude Code** — the grace countdown still shows, but the machine
-  won't actually power off while a Claude Code session is still working. Detected
-  from session-transcript activity across *all* sessions and subagents (recent
-  appends, plus an unanswered `tool_use` so a single long-running tool still
-  counts). No way to extend it manually. See `defer_for_claude` /
-  `claude_active_window_seconds`.
+- **Wait for Claude Code and Codex** — the grace countdown still shows, but the
+  machine won't actually power off while a Claude Code session or a Codex thread
+  is still working, whichever is driving and whichever was handed work. Claude is
+  detected from session-transcript activity across *all* sessions and subagents
+  (recent appends, plus an unanswered `tool_use` so a single long-running tool
+  still counts). Codex Desktop threads and `codex exec` runs are detected from
+  their rollouts in `~/.codex/sessions` (or `$CODEX_HOME/sessions`): recent
+  appends, plus a turn that has started and not completed. Each agent must be
+  running (`claude.exe` / `codex.exe`), and an unfinished turn holds for at most
+  6 hours. Background jobs a finished turn left running, including jobs on the
+  Mac, are not seen. No way to extend it manually. See `defer_for_claude` /
+  `claude_active_window_seconds`, which cover both agents.
 - **Grace countdown** — a final, uncancelable 60s window to save your work.
 - **Tighten now, weaken later** — stricter changes apply immediately; looser
   changes are queued and only activate after the edit cooldown (default 24h).

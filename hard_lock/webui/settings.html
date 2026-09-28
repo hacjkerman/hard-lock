@@ -191,11 +191,12 @@
 
         <section class="section">
           <div class="section-head">
-            <div class="section-title">Wait for Claude Code</div>
+            <div class="section-title">Wait for Claude Code and Codex</div>
             <div class="section-sub">
-              Don't power off while a Claude Code session is still working —
-              detected from session transcript activity (all sessions and
-              subagents), including a single long-running tool. The shutdown
+              Don't power off while a Claude Code session or Codex thread is
+              still working, whichever one is driving — detected from their
+              transcripts (all sessions, subagents and threads), including a
+              single long-running tool or an unfinished Codex turn. The shutdown
               warning still shows; the machine just waits, then shuts down once
               every session is idle. Turning this on is <em>weakening</em>
               (queued); off is <em>tightening</em> (instant).
@@ -204,7 +205,7 @@
 
           <div class="row row-toggle">
             <div class="row-label" style="flex: 1;">
-              <div>Wait for Claude is <span id="claude-state" class="tone-green" style="font-weight: 600;">ON</span></div>
+              <div>Wait for Claude / Codex is <span id="claude-state" class="tone-green" style="font-weight: 600;">ON</span></div>
             </div>
             <div class="toggle" id="defer_for_claude">
               <div class="knob"></div>

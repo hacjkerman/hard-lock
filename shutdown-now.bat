@@ -2,8 +2,8 @@
 REM Trigger Hard Lock's real shutdown on demand.
 REM
 REM Shows the grace countdown, then powers the machine off — but holds at zero
-REM ("Waiting for Claude Code to finish...") while any Claude Code session is
-REM still working, and holds while a defer-for game is running. Writes NO config,
+REM ("Waiting for Claude Code / Codex to finish...") while any Claude Code session
+REM or Codex thread is still working, and holds while a defer-for game is running. Writes NO config,
 REM so there is nothing to revert and no boot-loop risk.
 REM
 REM Close the window / kill the process to abort before it fires.
@@ -15,6 +15,6 @@ if not exist "%EXE%" (
     exit /b 1
 )
 echo Starting Hard Lock shutdown via "%EXE%"
-echo A 60s countdown will appear; it waits for Claude Code before powering off.
+echo A 60s countdown will appear; it waits for Claude Code and Codex before powering off.
 start "" "%EXE%" --test-shutdown 60 real
 endlocal

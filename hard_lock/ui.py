@@ -20,13 +20,14 @@ def show_warning(message: str) -> None:
 
 
 class GraceCountdown:
-    def __init__(self, seconds: int, dry_run: bool, claude_active=None):
+    def __init__(self, seconds: int, dry_run: bool, agent_active=None):
         self.remaining = seconds
         self.dry_run = dry_run
-        # Optional callable → True while a Claude Code session is running. When the
-        # countdown hits zero we hold the power-off (but keep this window up) until
-        # it returns False, so we never kill the machine mid-Claude-turn.
-        self.claude_active = claude_active
+        # Optional callable → True while a Claude Code session or Codex thread is
+        # working. When the countdown hits zero we hold the power-off (but keep
+        # this window up) until it returns False, so we never kill the machine
+        # mid-turn, whichever agent is driving.
+        self.agent_active = agent_active
         self.root = tk.Tk()
         self.root.title("HARD LOCK — Shutting Down")
         self.root.overrideredirect(True)
@@ -66,16 +67,16 @@ class GraceCountdown:
 
     def _tick(self) -> None:
         if self.remaining <= 0:
-            # Wait for Claude Code to finish before actually powering off — the
-            # window stays up (message still shown), we just don't shut down yet.
-            if self.claude_active is not None:
+            # Wait for Claude Code / Codex to finish before actually powering off —
+            # the window stays up (message still shown), we just don't shut down yet.
+            if self.agent_active is not None:
                 try:
-                    holding = self.claude_active()
+                    holding = self.agent_active()
                 except Exception:
                     holding = False
                 if holding:
                     self.label.config(text="0")
-                    self.msg.config(text="Waiting for Claude Code to finish…")
+                    self.msg.config(text="Waiting for Claude Code / Codex to finish…")
                     self.root.after(1000, self._tick)
                     return
             self.root.destroy()

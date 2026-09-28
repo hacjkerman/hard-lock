@@ -57,6 +57,17 @@ def _parse_test_args(rest, default_grace: int, config_dry_run: bool):
     return grace, (config_dry_run and not force_real)
 
 
+def _agent_active(config):
+    """What the grace countdown waits on: any Claude Code session or Codex
+    thread still working, whichever one is driving and whichever was handed
+    work. None when the wait is switched off."""
+    if not config.defer_for_claude:
+        return None
+    from . import claudecode, codex
+    window = config.claude_active_window_seconds
+    return lambda: claudecode.is_claude_active(window) or codex.is_codex_active(window)
+
+
 def _run_test_shutdown(rest: "list[str]") -> int:
     """On-demand shutdown test: show the grace countdown, then shut down per the
     current mode (dry-run simulates; armed powers off for real). Sets NO limit
@@ -66,7 +77,7 @@ def _run_test_shutdown(rest: "list[str]") -> int:
     from .config import Config
     from .history import EventLog
     from .ui import GraceCountdown
-    from . import league, claudecode
+    from . import league
 
     config = Config.load(CONFIG_PATH)
     grace, dry = _parse_test_args(rest, config.grace_seconds, config.dry_run)
@@ -82,9 +93,8 @@ def _run_test_shutdown(rest: "list[str]") -> int:
         log.append("shutdown_test", dry_run=dry, grace_seconds=grace)
     except Exception:
         pass
-    claude_active = ((lambda: claudecode.is_claude_active(config.claude_active_window_seconds))
-                     if config.defer_for_claude else None)
-    GraceCountdown(grace, dry, claude_active=claude_active).run()  # counts down → shutdown (or waits for Claude)
+    # counts down → shutdown (or waits for Claude Code / Codex)
+    GraceCountdown(grace, dry, agent_active=_agent_active(config)).run()
     return 0
 
 
@@ -133,7 +143,7 @@ def main(argv: "list[str] | None" = None) -> int:
 
     from . import build, guardian
 
-    from . import league, claudecode, winstyle
+    from . import league, winstyle
     from .api import Api
     from .history import DayHistory, EventLog
     from .tracker import ActiveTimeTracker
@@ -533,10 +543,10 @@ def main(argv: "list[str] | None" = None) -> int:
     # tkinter mainloop in the same process, but the webview loop has now
     # exited so we own the thread again.
     if grace_requested[0]:
-        # Wait for any active Claude Code session before actually powering off.
-        claude_active = ((lambda: claudecode.is_claude_active(config.claude_active_window_seconds))
-                     if config.defer_for_claude else None)
-        GraceCountdown(config.grace_seconds, config.dry_run, claude_active=claude_active).run()
+        # Wait for any working Claude Code session or Codex thread before
+        # actually powering off.
+        GraceCountdown(config.grace_seconds, config.dry_run,
+                       agent_active=_agent_active(config)).run()
     return 0
 
 

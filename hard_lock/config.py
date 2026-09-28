@@ -22,9 +22,10 @@ DEFAULTS = {
     # plus game_defer_grace_seconds. Empty list disables the feature.
     "defer_for_games": ["League of Legends.exe"],
     "game_defer_grace_seconds": 180,
-    # Don't power off while a Claude Code session is actively working. The grace
-    # warning still shows; the machine just waits for Claude to finish. "Working"
-    # = some session transcript written within claude_active_window_seconds.
+    # Don't power off while a Claude Code session or Codex thread is actively
+    # working. The grace warning still shows; the machine just waits for them to
+    # finish. "Working" = a transcript written within claude_active_window_seconds,
+    # or a turn still in progress. The key keeps its old name for existing configs.
     "defer_for_claude": True,
     "claude_active_window_seconds": 300,
     # Tuck the HUD away to the tray after it's been on screen this long, so it
